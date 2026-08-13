@@ -1,0 +1,36 @@
+{# ========================================================================= #}
+{# Simple SEO settings layout                                                #}
+{#                                                                           #}
+{# Shared chrome for the settings screens, which live in the plugin's own    #}
+{# CP section (sidebar subnav — pages set selectedSubnavItem).               #}
+{#                                                                           #}
+{# Site selection is Craft's native switcher: a `site-crumb` breadcrumb with #}
+{# a disclosure menu, rendered by _layouts/components/crumbs.twig into the   #}
+{# top bar beside the account menu. Core uses exactly this on element        #}
+{# indexes and — the closest analogue to these screens — the Globals edit    #}
+{# screen (templates/globals/_edit.twig), which likewise makes the site      #}
+{# crumb the ONLY crumb. There is no other native site switcher in Craft 5.  #}
+{#                                                                           #}
+{# `siteMenuItems()` builds `?site=<handle>` links on the CURRENT path, so   #}
+{# switching keeps you on the screen you were looking at and the controller  #}
+{# just reads the `site` query param.                                        #}
+{# ========================================================================= #}
+
+{% extends '_layouts/cp' %}
+
+{% set title = 'Simple SEO'|t('simple-seo') %}
+{% set fullPageForm = fullPageForm ?? true %}
+
+{# Global screens (Fields) opt out — there is no site to pick. #}
+{% if (showSiteCrumb ?? true) and craft.app.getIsMultiSite() and supportedSites|length > 1 %}
+    {% set crumbs = [{
+        id: 'site-crumb',
+        icon: 'world',
+        iconAltText: 'Site'|t('app'),
+        label: currentSite.name|t('site'),
+        menu: {
+            items: siteMenuItems(supportedSites, currentSite),
+            label: 'Select site'|t('app'),
+        },
+    }] %}
+{% endif %}

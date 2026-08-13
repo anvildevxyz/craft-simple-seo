@@ -1,0 +1,214 @@
+/**
+ * SEO field styles: soft-limit counters + SERP/social preview.
+ * The previews sit on a white card in both CP themes — they mimic search and
+ * social surfaces, which are light regardless of the author's CP theme.
+ */
+.simple-seo-counter {
+  margin: -18px 0 24px;
+  text-align: right;
+  font-size: 11px;
+  color: var(--medium-text-color, #596673);
+}
+
+.simple-seo-counter--near {
+  color: var(--warning-color, #b06f00);
+}
+
+.simple-seo-counter--over {
+  color: var(--error-color, #cf1124);
+}
+
+.simple-seo-preview__tablist {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 10px;
+  padding: 3px;
+  border-radius: 8px;
+  background: var(--gray-100, #e8ebee);
+  width: fit-content;
+}
+
+.simple-seo-preview__tab {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  border-radius: 6px;
+  padding: 5px 14px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--medium-text-color, #596673);
+  cursor: pointer;
+}
+
+.simple-seo-preview__tab:focus-visible {
+  box-shadow: var(--focus-ring, 0 0 0 2px #127fbf);
+  outline: none;
+}
+
+.simple-seo-preview__tab.sel {
+  background: #fff;
+  color: var(--text-color, #1f262d);
+  box-shadow: 0 1px 3px rgba(31, 38, 45, 0.15);
+  cursor: default;
+}
+
+.simple-seo-preview__source {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.simple-seo-preview__favicon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  background: #f0f2f5;
+  border: 1px solid #e3e5e8;
+  font-size: 12px;
+  font-weight: 600;
+  color: #4d5156;
+  flex-shrink: 0;
+}
+
+.simple-seo-preview__sourcetext {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.simple-seo-preview__sitename {
+  font-size: 12px;
+  color: #202124;
+  line-height: 1.3;
+}
+
+.simple-seo-preview {
+  margin-bottom: 24px;
+}
+
+.simple-seo-preview__pane {
+  padding: 14px 16px;
+  border: 1px solid var(--hairline-color, #e3e5e8);
+  border-radius: 6px;
+  background: #fff;
+  min-width: 0;
+}
+
+/* The Robots pane holds form controls, not a search-surface mock, so it
+   follows the CP theme instead of the forced-light preview card. */
+.simple-seo-preview__pane--robots {
+  background: transparent;
+  padding-bottom: 2px;
+}
+
+/* Robots switches: label and switch share one row, switch right-aligned —
+   the same shape as Craft's own sidebar toggles. Instructions and errors
+   wrap onto their own full-width line below the label. */
+.simple-seo-robots .field.lightswitch-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  column-gap: 12px;
+  margin: 14px 0;
+}
+
+.simple-seo-robots .field.lightswitch-field:first-child {
+  margin-top: 0;
+}
+
+.simple-seo-robots .field.lightswitch-field:last-child {
+  margin-bottom: 0;
+}
+
+.simple-seo-robots .field.lightswitch-field > .heading {
+  margin: 0;
+  order: 1;
+  flex: 1 1 0%;
+  min-width: 0;
+}
+
+.simple-seo-robots .field.lightswitch-field > .input {
+  order: 2;
+  flex: 0 0 auto;
+}
+
+.simple-seo-robots .field.lightswitch-field > .instructions,
+.simple-seo-robots .field.lightswitch-field > .errors {
+  flex-basis: 100%;
+  order: 3;
+}
+
+.simple-seo-robots .field.lightswitch-field > .instructions {
+  margin: 2px 0 0;
+}
+
+.simple-seo-preview__url {
+  font-size: 11px;
+  color: #4d5156;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.3;
+}
+
+.simple-seo-preview__title {
+  font-size: 18px;
+  line-height: 1.3;
+  color: #1a0dab;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.simple-seo-preview__title--social {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1d2129;
+  white-space: normal;
+}
+
+.simple-seo-preview__desc {
+  font-size: 13px;
+  line-height: 1.4;
+  color: #4d5156;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+
+.simple-seo-preview__desc--empty {
+  color: #9aa0a6;
+  font-style: italic;
+}
+
+.simple-seo-preview__image {
+  aspect-ratio: 1.91 / 1;
+  max-height: 160px;
+  border-radius: 4px;
+  background-color: #f0f2f5;
+  background-size: cover;
+  background-position: center;
+  margin-bottom: 8px;
+}
+
+.simple-seo-preview__image--empty {
+  background-image:
+    linear-gradient(45deg, #e4e6eb 25%, transparent 25%, transparent 75%, #e4e6eb 75%),
+    linear-gradient(45deg, #e4e6eb 25%, transparent 25%, transparent 75%, #e4e6eb 75%);
+  background-size: 16px 16px;
+  background-position: 0 0, 8px 8px;
+}
+
+.simple-seo-preview__host {
+  font-size: 11px;
+  text-transform: uppercase;
+  color: #606770;
+  margin-bottom: 2px;
+}

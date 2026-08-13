@@ -1,0 +1,22 @@
+vendor/
+node_modules/
+.env
+.env.local
+.DS_Store
+*.log
+composer.lock
+package-lock.json
+.vscode/
+.idea/
+.phpunit.cache/
+
+# Plugin-root runtime if someone runs Craft CLI from this directory
+/storage/
+
+# Codeception integration-suite runtime artifacts (config files ARE committed)
+tests/_output/
+tests/_craft/storage/
+tests/_support/_generated/
+
+# Published asset-bundle copies (regenerated from src/web/assets at runtime)
+cpresources/

@@ -1,0 +1,92 @@
+{# ========================================================================= #}
+{# Simple SEO — Robots settings                                              #}
+{#                                                                           #}
+{# Per-site robots.txt body, one site at a time. Leaving the field empty     #}
+{# serves the shipped default, so a zero-config install needs nothing here.  #}
+{# Project config throughout, so the screen is read-only (formless) when     #}
+{# allowAdminChanges is off.                                                 #}
+{# ========================================================================= #}
+
+{% extends 'simple-seo/settings/_layout' %}
+{% import '_includes/forms' as forms %}
+
+{% set selectedSubnavItem = 'robots' %}
+{% set editable = canManageRobots and allowAdminChanges %}
+{% set fullPageForm = editable %}
+
+{% block content %}
+    {% if editable %}
+        {{ actionInput('simple-seo/settings/save-robots') }}
+        {{ redirectInput(redirectUrl) }}
+        {{ hiddenInput('siteUid', currentSite.uid) }}
+    {% endif %}
+    {% include 'simple-seo/_includes/settings-readonly-notice.twig' with {
+        canManage: canManageRobots,
+        allowAdminChanges: allowAdminChanges,
+        configMessage: 'Robots settings are managed in project config and are read-only in this environment.'|t('simple-seo'),
+    } only %}
+
+    {{ forms.lightswitchField({
+        label: 'Serve this site’s robots.txt'|t('simple-seo'),
+        instructions: 'Off means the plugin registers no `/robots.txt` route, so the URL falls through to your own template or a file in the web root. Your content below is kept.'|t('simple-seo'),
+        id: 'robotsTxtEnabled',
+        name: 'robotsTxtEnabled',
+        on: robotsTxtEnabled,
+        disabled: not editable,
+        first: editable,
+    }) }}
+
+    {% if lockdownForcesRobots and not robotsTxtEnabled %}
+        <div class="readable">
+            <blockquote class="note warning">
+                {{ 'robots.txt is switched off for this site, but `siteWideNoindex` is serving it anyway — the lockdown disallows every crawler and cannot be opted out of.'|t('simple-seo') }}
+            </blockquote>
+        </div>
+    {% elseif not robotsTxtEnabled %}
+        <div class="readable">
+            <blockquote class="note tip">
+                {{ 'This plugin is not serving robots.txt for this site.'|t('simple-seo') }}
+            </blockquote>
+        </div>
+    {% endif %}
+
+    {% if settings.siteWideNoindex %}
+        <div class="readable">
+            <blockquote class="note warning">
+                {{ 'This environment is locked down by `siteWideNoindex`, so robots.txt disallows everything and the content below is not being served. Remove the flag from config/simple-seo.php to serve it.'|t('simple-seo') }}
+            </blockquote>
+        </div>
+    {% endif %}
+
+    {% if shadowedByFile %}
+        <div class="readable">
+            <blockquote class="note warning">
+                {{ 'A robots.txt file exists in your web root. Web servers serve files before Craft routes, so that file is being served and these settings have no effect until you remove it.'|t('simple-seo') }}
+            </blockquote>
+        </div>
+    {% endif %}
+
+    {% if blocksEverything and not settings.siteWideNoindex %}
+        <div class="readable">
+            <blockquote class="note warning">
+                {{ 'This robots.txt asks every crawler to stay off the entire site. That is correct for a staging environment and catastrophic for a live one — double-check which this is.'|t('simple-seo') }}
+            </blockquote>
+        </div>
+    {% endif %}
+
+    {{ forms.textareaField({
+        label: 'robots.txt'|t('simple-seo'),
+        instructions: 'Leave empty for the default. `{token}` expands to this site’s sitemap URL.'|t('simple-seo', { token: sitemapToken }),
+        id: 'robotsTxt',
+        name: 'robotsTxt',
+        value: robotsTxt,
+        placeholder: defaultRobotsTxt,
+        rows: 10,
+        class: 'code',
+        disabled: not editable,
+    }) }}
+
+    <p>
+        <a href="{{ robotsUrl }}" target="_blank" rel="noopener">{{ 'View this site’s robots.txt'|t('simple-seo') }}</a>
+    </p>
+{% endblock %}

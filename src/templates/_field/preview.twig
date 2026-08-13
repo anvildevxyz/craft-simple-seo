@@ -1,0 +1,68 @@
+{# ========================================================================= #}
+{# SERP + social preview and robots controls — tabbed                        #}
+{#                                                                           #}
+{# Rendered fully server-side with initial values and updated client-side    #}
+{# from the sibling inputs. There is deliberately no XHR anywhere in this    #}
+{# preview — "Failed to retrieve entry preview" (ether #288/#326/#278/#395)  #}
+{# is a failure class this design cannot have.                               #}
+{#                                                                           #}
+{# The Robots tab shows the pre-rendered pane input.twig passes in           #}
+{# (robotsPane, null when the field offers no robots controls). Its inputs   #}
+{# stay in the DOM (and submit) while the pane is hidden, so switching tabs  #}
+{# can never lose a value.                                                   #}
+{#                                                                           #}
+{# The tabs follow the ARIA tabs pattern: real buttons, roving tabindex,     #}
+{# arrow-key navigation (wired in seo-field.js via Garnish key constants).   #}
+{# ========================================================================= #}
+
+<div class="simple-seo-preview">
+    {%- set tablistLabel = robotsPane is not null
+        ? 'Preview and robots'|t('simple-seo')
+        : 'Preview'|t('simple-seo')
+    -%}
+    <div class="simple-seo-preview__tablist" role="tablist" aria-label="{{ tablistLabel }}">
+        <button type="button" role="tab" id="{{ id }}-tab-serp" aria-selected="true" aria-controls="{{ id }}-pane-serp" class="simple-seo-preview__tab sel" data-preview-tab="serp">
+            {{- 'Search preview'|t('simple-seo') -}}
+        </button>
+        <button type="button" role="tab" id="{{ id }}-tab-social" aria-selected="false" aria-controls="{{ id }}-pane-social" tabindex="-1" class="simple-seo-preview__tab" data-preview-tab="social">
+            {{- 'Social preview'|t('simple-seo') -}}
+        </button>
+        {% if robotsPane is not null %}
+            <button type="button" role="tab" id="{{ id }}-tab-robots" aria-selected="false" aria-controls="{{ id }}-pane-robots" tabindex="-1" class="simple-seo-preview__tab" data-preview-tab="robots">
+                {{- 'Robots'|t('simple-seo') -}}
+            </button>
+        {% endif %}
+    </div>
+
+    <div id="{{ id }}-pane-serp" role="tabpanel" aria-labelledby="{{ id }}-tab-serp" class="simple-seo-preview__pane" data-preview-pane="serp">
+        <div class="simple-seo-preview__source">
+            <span class="simple-seo-preview__favicon">{{ preview.siteName|first|upper }}</span>
+            <span class="simple-seo-preview__sourcetext">
+                <span class="simple-seo-preview__sitename">{{ preview.siteName }}</span>
+                {% if preview.displayUrl %}
+                    <span class="simple-seo-preview__url">{{ preview.displayUrl }}</span>
+                {% endif %}
+            </span>
+        </div>
+        <div class="simple-seo-preview__title" data-preview-title>{{ preview.serpTitle }}</div>
+        <div class="simple-seo-preview__desc{{ preview.resolvedDescriptionIsPlaceholder ? ' simple-seo-preview__desc--empty' }}" data-preview-description>
+            {{- preview.resolvedDescription -}}
+        </div>
+    </div>
+
+    <div id="{{ id }}-pane-social" role="tabpanel" aria-labelledby="{{ id }}-tab-social" class="simple-seo-preview__pane hidden" data-preview-pane="social">
+        <div class="simple-seo-preview__image{{ preview.socialImageUrl ? '' : ' simple-seo-preview__image--empty' }}" data-preview-image
+            {%- if preview.socialImageUrl %} style="background-image: url('{{ preview.socialImageUrl }}')"{% endif %}></div>
+        <div class="simple-seo-preview__host">{{ preview.host }}</div>
+        <div class="simple-seo-preview__title simple-seo-preview__title--social" data-preview-social-title>{{ preview.socialTitle }}</div>
+        <div class="simple-seo-preview__desc{{ preview.resolvedDescriptionIsPlaceholder ? ' simple-seo-preview__desc--empty' }}" data-preview-description>
+            {{- preview.resolvedDescription -}}
+        </div>
+    </div>
+
+    {% if robotsPane is not null %}
+        <div id="{{ id }}-pane-robots" role="tabpanel" aria-labelledby="{{ id }}-tab-robots" class="simple-seo-preview__pane simple-seo-preview__pane--robots hidden" data-preview-pane="robots">
+            {{ robotsPane }}
+        </div>
+    {% endif %}
+</div>

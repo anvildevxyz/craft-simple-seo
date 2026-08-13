@@ -1,0 +1,49 @@
+{# ========================================================================= #}
+{# Robots controls — noindex/nofollow plus every offered directive, each as  #}
+{# its own switch. Which directives a field offers is a field setting.       #}
+{#                                                                           #}
+{# A switch that is off posts an empty value; normalization drops it. A      #}
+{# stored directive whose switch is hidden round-trips through a hidden      #}
+{# input, so hiding a directive never erases data.                           #}
+{#                                                                           #}
+{# Included from the preview's Robots tab, or directly by input.twig when   #}
+{# the field renders without a preview (inline editing, the field defaults   #}
+{# screen, or the preview sub-field switched off).                           #}
+{# ========================================================================= #}
+
+{% import '_includes/forms' as forms %}
+
+<div class="simple-seo-robots">
+{% if shows.robots %}
+    {{ forms.lightswitchField({
+        label: 'Hide from search engines (noindex)'|t('simple-seo'),
+        instructions: 'Also excluded from the sitemap.'|t('simple-seo'),
+        id: id ~ '-noindex',
+        name: name ~ '[noindex]',
+        on: value.noindex,
+    }) }}
+
+    {{ forms.lightswitchField({
+        label: 'Don’t follow links on this page (nofollow)'|t('simple-seo'),
+        id: id ~ '-nofollow',
+        name: name ~ '[nofollow]',
+        on: value.nofollow,
+    }) }}
+{% endif %}
+
+{% if shows.robotsDirectives %}
+    {% for directive in robotsDirectives %}
+        {{ forms.lightswitchField({
+            label: directiveLabels[directive] ?? directive,
+            id: id ~ '-directive-' ~ loop.index,
+            name: name ~ '[robotsDirectives][]',
+            value: directive,
+            on: directive in value.robotsDirectives,
+        }) }}
+    {% endfor %}
+
+    {% for directive in value.robotsDirectives|filter(d => d not in robotsDirectives) %}
+        {{ hiddenInput(name ~ '[robotsDirectives][]', directive) }}
+    {% endfor %}
+{% endif %}
+</div>

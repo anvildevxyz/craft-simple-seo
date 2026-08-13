@@ -1,0 +1,39 @@
+{# ========================================================================= #}
+{# SEO field settings                                                        #}
+{#                                                                           #}
+{# Which controls editors see on this field instance, grouped the same way   #}
+{# as the install-wide Fields screen (shared partial). All on by default.    #}
+{# ========================================================================= #}
+
+{% import '_includes/forms' as forms %}
+
+{% set subfieldsInput %}
+    {% include 'simple-seo/_includes/grouped-checkboxes.twig' with {
+        name: 'enabledSubfields',
+        groups: subfieldGroups,
+        values: field.enabledSubfields,
+    } only %}
+{% endset %}
+
+{{ forms.field({
+    label: 'Fields shown on entries'|t('simple-seo'),
+    instructions: 'Hiding a control never erases saved values.'|t('simple-seo'),
+    id: 'enabledSubfields',
+    first: true,
+}, subfieldsInput) }}
+
+{% if someUnavailable %}
+    <p class="light">
+        {{ 'Some controls aren’t listed because this install doesn’t offer them.'|t('simple-seo') }}
+        <a href="{{ fieldsSettingsUrl }}">{{ 'Simple SEO → Fields'|t('simple-seo') }}</a>
+    </p>
+{% endif %}
+
+{{ forms.checkboxGroupField({
+    label: 'Robots directives shown'|t('simple-seo'),
+    instructions: 'Hiding a directive never erases saved values.'|t('simple-seo'),
+    id: 'enabledRobotsDirectives',
+    name: 'enabledRobotsDirectives',
+    options: directiveOptions,
+    values: field.enabledRobotsDirectives,
+}) }}

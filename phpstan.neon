@@ -1,0 +1,24 @@
+includes:
+    - vendor/craftcms/phpstan/phpstan.neon
+
+parameters:
+    level: 7
+    paths:
+        - src
+        - tests/unit
+    excludePaths:
+        - vendor
+        # Codeception-backed integration suite + its support/bootstrap: the actor
+        # pattern, _generated helpers, and craft\test framework magic aren't
+        # statically analysable. The unit suite (tests/unit) stays analysed.
+        - tests/integration
+        - tests/_support
+    bootstrapFiles:
+        - vendor/autoload.php
+        - vendor/craftcms/cms/bootstrap/console.php
+    ignoreErrors:
+        # The optional craft-mcp integration (src/mcp). Guarded by
+        # class_exists() at registration and read only reflectively, so
+        # nothing loads when the package is absent.
+        - '#Attribute class Mcp\\Capability\\Attribute\\\w+ does not exist#'
+        - '#stimmt\\craft\\Mcp\\#'

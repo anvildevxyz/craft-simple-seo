@@ -1,0 +1,118 @@
+<?php
+
+namespace anvildev\simpleseo\console\controllers;
+
+use anvildev\simpleseo\models\EtherMigrationReport;
+use anvildev\simpleseo\Plugin;
+use craft\console\Controller;
+use craft\helpers\Json;
+use yii\console\ExitCode;
+
+/**
+ * Migration commands.
+ *
+ * `craft simple-seo/migrate/ether` is a DRY RUN by default — it reports
+ * everything a migration would do and writes nothing. Pass --apply to
+ * migrate for real.
+ *
+ * @author Anvil Dev
+ * @since 1.0.0
+ */
+class MigrateController extends Controller
+{
+    // Public Properties
+    // =========================================================================
+
+    /**
+     * @var bool Actually write changes. Without it the run is a dry run.
+     */
+    public bool $apply = false;
+
+    /**
+     * @var string|null Target path for the Retour-importable redirects CSV.
+     */
+    public ?string $csv = null;
+
+    // Public Methods
+    // =========================================================================
+
+    /**
+     * @inheritdoc
+     */
+    public function options($actionID): array
+    {
+        return array_merge(parent::options($actionID), ['apply', 'csv']);
+    }
+
+    /**
+     * Migrates ether/seo field data, exports its redirects as a
+     * Retour-importable CSV, and surfaces its settings for review.
+     */
+    public function actionEther(): int
+    {
+        $service = Plugin::getInstance()->getEtherMigration();
+        $report = $this->apply ? $service->apply($this->csv) : $service->analyze();
+
+        $this->stdout($this->apply ? "Ether SEO migration — APPLIED\n\n" : "Ether SEO migration — DRY RUN (nothing written)\n\n");
+
+        if ($report->fields !== []) {
+            $this->stdout("Fields:\n");
+            foreach ($report->fields as $field) {
+                $this->stdout("  - {$field['name']} ({$field['handle']}) — {$field['layoutElements']} layout placement(s)\n");
+            }
+            $this->stdout("\n");
+        }
+
+        $this->stdout($this->_summary($report));
+
+        foreach ($report->notes as $note) {
+            $this->stdout("• $note\n");
+        }
+
+        if ($report->etherSettings !== null) {
+            $this->stdout("\nEther settings (for manual review):\n" . Json::encode($report->etherSettings) . "\n");
+        }
+
+        if (!$this->apply) {
+            $this->stdout("\nDry run only. Re-run with --apply to migrate.\n");
+        }
+
+        if ($report->failures !== []) {
+            $this->stderr(sprintf(
+                "\n%d step(s) failed — this migration is PARTIAL. Fix the cause and re-run; the run is idempotent.\n",
+                count($report->failures),
+            ));
+
+            return ExitCode::UNSPECIFIED_ERROR;
+        }
+
+        return ExitCode::OK;
+    }
+
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * Formats the tallies block.
+     */
+    private function _summary(EtherMigrationReport $report): string
+    {
+        $verb = $report->applied ? 'converted' : 'would convert';
+        $lines = [
+            sprintf('%d ether value(s) found; %s %d (%d already migrated, skipped)', $report->etherValues, $verb, $report->converted, $report->alreadyMigrated),
+            sprintf('  titles: %d, descriptions: %d, images: %d, robots: %d, canonicals: %d', $report->titles, $report->descriptions, $report->images, $report->robots, $report->canonicals),
+        ];
+
+        foreach ($report->perSite as $siteId => $count) {
+            $lines[] = "  site $siteId: $count value(s)";
+        }
+
+        $lines[] = sprintf(
+            '%d redirect(s) found%s',
+            $report->redirectsFound,
+            $report->redirectsCsvPath !== null ? " — CSV: $report->redirectsCsvPath" : '',
+        );
+
+        return implode("\n", $lines) . "\n\n";
+    }
+}

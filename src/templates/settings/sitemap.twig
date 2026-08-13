@@ -1,0 +1,135 @@
+{# ========================================================================= #}
+{# Simple SEO — Sitemap settings                                             #}
+{#                                                                           #}
+{# One site at a time (site crumb in the header). Everything here is project #}
+{# config, so the whole screen is read-only when allowAdminChanges is off —  #}
+{# the form (and save button) only render when saving is possible.           #}
+{# ========================================================================= #}
+
+{% extends 'simple-seo/settings/_layout' %}
+{% import '_includes/forms' as forms %}
+
+{% set selectedSubnavItem = 'sitemap' %}
+{% set editable = canManageSettings and allowAdminChanges %}
+{% set fullPageForm = editable %}
+
+{% block content %}
+    {% if editable %}
+        {{ actionInput('simple-seo/settings/save-sitemap') }}
+        {{ redirectInput(redirectUrl) }}
+        {{ hiddenInput('siteUid', currentSite.uid) }}
+    {% endif %}
+    {% include 'simple-seo/_includes/settings-readonly-notice.twig' with {
+        canManage: canManageSettings,
+        allowAdminChanges: allowAdminChanges,
+        configMessage: 'Sitemap settings are managed in project config and are read-only in this environment.'|t('simple-seo'),
+    } only %}
+
+    {{ forms.lightswitchField({
+        label: 'Serve this site’s sitemap'|t('simple-seo'),
+        instructions: 'Off means the plugin registers no sitemap routes at all, so `/sitemap.xml` falls through to your own template or another plugin. Your section choices below are kept.'|t('simple-seo'),
+        id: 'sitemapEnabled',
+        name: 'sitemapEnabled',
+        on: sitemapEnabled,
+        disabled: not editable,
+        first: editable,
+    }) }}
+
+    {% if not sitemapEnabled %}
+        <div class="readable">
+            <blockquote class="note tip">
+                {{ 'This plugin is not serving a sitemap for this site.'|t('simple-seo') }}
+            </blockquote>
+        </div>
+    {% endif %}
+
+    {# Stored inverted (as exclusions), so a newly created section joins the
+       sitemap without anyone revisiting this screen.
+
+       No empty-value hidden input here, unlike forms.checkboxGroup: the save
+       action reads a missing key as "nothing checked", which is exactly
+       right, and a scalar `sitemapSections=''` sharing the name with
+       `sitemapSections[]` would have to be ordered before the checkboxes or
+       PHP's last-wins parsing wipes the whole array. #}
+    {% set excluded = collect(settings.sitemapExcludedSections[currentSite.uid] ?? []).all() %}
+
+    {# Why a section carries no URLs, translated from the reason code explain()
+       computes. `excluded` and `ok` say nothing: the unchecked checkbox and
+       the URL count already do. #}
+    {% set reasonNotes = {
+        notEnabled: 'Not enabled for this site.'|t('simple-seo'),
+        noUrls: 'No URLs for this site.'|t('simple-seo'),
+        noEntries: 'No live entries yet.'|t('simple-seo'),
+    } %}
+
+    {% if rows is empty %}
+        <div class="readable">
+            <blockquote class="note tip">
+                {{ 'No sections exist yet. The sitemap lists entries from sections that have URLs.'|t('simple-seo') }}
+            </blockquote>
+        </div>
+    {% endif %}
+
+    {# Rendered even when switched off, so the choices stay editable and are
+       visibly preserved — but hidden from view to keep the screen honest
+       about what is actually being served. #}
+    <div class="field{{ not sitemapEnabled or rows is empty ? ' hidden' : '' }}">
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Section'|t('simple-seo') }}</th>
+                    <th scope="col" class="thin">{{ 'URLs'|t('simple-seo') }}</th>
+                    <th scope="col" class="thin">{{ 'Priority'|t('simple-seo') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for row in rows %}
+                    {% set note = row.reasonCode == 'allNoindexed'
+                        ? 'All {total} live entries are noindexed.'|t('simple-seo', row.reasonParams)
+                        : reasonNotes[row.reasonCode] ?? null %}
+                    <tr>
+                        <th scope="row">
+                            {{ forms.checkbox({
+                                label: row.name,
+                                id: 'sitemapSection-' ~ row.section,
+                                name: 'sitemapSections[]',
+                                value: row.uid,
+                                checked: row.uid not in excluded,
+                                disabled: not editable,
+                            }) }}
+                            {% if note %}
+                                <div class="light">{{ note }}</div>
+                            {% endif %}
+                        </th>
+                        <td>
+                            {%- if row.included and row.urls > 0 -%}
+                                <a href="{{ sitemapBaseUrl }}section-{{ row.section }}.xml" target="_blank" rel="noopener">{{ row.urls }}</a>
+                            {%- else -%}
+                                <span class="light">{{ row.urls }}</span>
+                            {%- endif -%}
+                        </td>
+                        <td>
+                            {{ forms.select({
+                                id: 'sitemapPriority-' ~ row.section,
+                                name: 'sitemapPriorities[' ~ row.uid ~ ']',
+                                options: priorityOptions,
+                                value: priorities[row.uid] ?? '',
+                                disabled: not editable,
+                            }) }}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if sitemapEnabled %}
+        {{ tag('a', {
+            class: ['btn', 'small'],
+            href: sitemapUrl,
+            target: '_blank',
+            rel: 'noopener',
+            text: 'View this site’s sitemap'|t('simple-seo'),
+        }) }}
+    {% endif %}
+{% endblock %}

@@ -1,0 +1,76 @@
+{
+  "name": "anvildev/craft-simple-seo",
+  "description": "Simple SEO fields for Craft CMS — meta title & description, social image, canonical, robots, and an XML sitemap",
+  "version": "1.0.0",
+  "type": "craft-plugin",
+  "license": "proprietary",
+  "keywords": ["craft", "cms", "craftcms", "seo", "sitemap", "meta"],
+  "authors": [
+    {
+      "name": "Anvil Dev",
+      "homepage": "https://anvildev.xyz"
+    }
+  ],
+  "support": {
+    "email": "hello@anvildev.xyz",
+    "issues": "https://github.com/anvildevxyz/craft-simple-seo/issues",
+    "source": "https://github.com/anvildevxyz/craft-simple-seo",
+    "docs": "https://github.com/anvildevxyz/craft-simple-seo/tree/main/docs"
+  },
+  "require": {
+    "php": "^8.2",
+    "craftcms/cms": "^5.0"
+  },
+  "suggest": {
+    "stimmt/craft-mcp": "Exposes Simple SEO's diagnostics and meta tools to MCP clients (agents driving Craft)."
+  },
+  "require-dev": {
+    "phpunit/phpunit": "^10.5",
+    "phpstan/phpstan": "^1.11",
+    "craftcms/phpstan": "dev-main",
+    "craftcms/ecs": "dev-main",
+    "codeception/codeception": "^5.2",
+    "codeception/module-asserts": "^3.0",
+    "codeception/module-yii2": "^1.1"
+  },
+  "autoload": {
+    "psr-4": {
+      "anvildev\\simpleseo\\": "src/"
+    }
+  },
+  "autoload-dev": {
+    "psr-4": {
+      "anvildev\\simpleseo\\tests\\": "tests/"
+    }
+  },
+  "extra": {
+    "name": "Simple SEO",
+    "handle": "simple-seo",
+    "class": "anvildev\\simpleseo\\Plugin",
+    "developer": "Anvil Dev",
+    "developerUrl": "https://anvildev.xyz",
+    "documentationUrl": "https://github.com/anvildevxyz/craft-simple-seo/tree/main/docs",
+    "changelogUrl": "https://raw.githubusercontent.com/anvildevxyz/craft-simple-seo/main/CHANGELOG.md"
+  },
+  "config": {
+    "allow-plugins": {
+      "yiisoft/yii2-composer": true,
+      "craftcms/plugin-installer": true
+    },
+    "platform": {
+      "php": "8.2"
+    }
+  },
+  "scripts": {
+    "test": "phpunit",
+    "test:js": "node tests/js/preview-format.test.js",
+    "test:integration": "codecept run integration",
+    "test:all": ["@test", "@test:js", "@test:integration"],
+    "ecs": "ecs check",
+    "ecs-fix": "ecs check --fix",
+    "phpstan": "phpstan analyse --memory-limit=1G",
+    "check": ["@ecs", "@phpstan", "@test", "@test:js"]
+  },
+  "minimum-stability": "dev",
+  "prefer-stable": true
+}

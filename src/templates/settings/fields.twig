@@ -1,0 +1,88 @@
+{# ========================================================================= #}
+{# Simple SEO — Fields settings                                              #}
+{#                                                                           #}
+{# Which controls SEO fields may offer, across the whole install. Fields     #}
+{# pick from this list; anything unchecked here is offered nowhere.          #}
+{#                                                                           #}
+{# Not per-site — fields are global — so this screen sets `showSiteCrumb` to #}
+{# false and the layout leaves the site selector out.                        #}
+{# ========================================================================= #}
+
+{% extends 'simple-seo/settings/_layout' %}
+{% import '_includes/forms' as forms %}
+
+{% set selectedSubnavItem = 'fields' %}
+{% set showSiteCrumb = false %}
+{% set editable = canManageSettings and allowAdminChanges %}
+{% set fullPageForm = editable %}
+
+{% block content %}
+    {% if editable %}
+        {{ actionInput('simple-seo/settings/save-fields') }}
+        {{ redirectInput(redirectUrl) }}
+    {% endif %}
+    {% include 'simple-seo/_includes/settings-readonly-notice.twig' with {
+        canManage: canManageSettings,
+        allowAdminChanges: allowAdminChanges,
+        configMessage: 'Field settings are managed in project config and are read-only in this environment.'|t('simple-seo'),
+    } only %}
+
+    {% set availableInput %}
+        {% include 'simple-seo/_includes/grouped-checkboxes.twig' with {
+            name: 'availableSubfields',
+            groups: subfieldGroups,
+            values: available,
+            disabled: not editable,
+        } only %}
+    {% endset %}
+
+    {{ forms.field({
+        label: 'Controls available in SEO fields'|t('simple-seo'),
+        instructions: 'Each field picks from this list. Hiding a control never erases saved values.'|t('simple-seo'),
+        id: 'availableSubfields',
+        first: editable,
+    }, availableInput) }}
+
+    <h2>{{ 'SEO fields on this install'|t('simple-seo') }}</h2>
+
+    {% if seoFields is empty %}
+        {# First-run state: the plugin does nothing on entries until a field
+           of this type exists, so the screen says so and offers the next
+           step to those who can take it (field creation is admin-only). #}
+        <p class="light">{{ 'No SEO field exists yet. Entries get their SEO controls from a field of type “SEO”.'|t('simple-seo') }}</p>
+        {% if currentUser.admin and allowAdminChanges %}
+            {{ tag('a', {
+                class: ['btn'],
+                href: cpUrl('settings/fields/new'),
+                text: 'Create an SEO field'|t('simple-seo'),
+            }) }}
+        {% endif %}
+    {% else %}
+        <table class="data fullwidth">
+            <thead>
+                <tr>
+                    <th scope="col">{{ 'Field'|t('simple-seo') }}</th>
+                    <th scope="col">{{ 'Shows'|t('simple-seo') }}</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for field in seoFields %}
+                    <tr>
+                        <th scope="row">
+                            <a href="{{ cpUrl('settings/fields/edit/' ~ field.id) }}">{{ field.name }}</a>
+                        </th>
+                        <td>
+                            {%- set shown = [] -%}
+                            {%- for key, label in subfieldLabels -%}
+                                {%- if field.showsSubfield(key) -%}
+                                    {%- set shown = shown|merge([label]) -%}
+                                {%- endif -%}
+                            {%- endfor -%}
+                            {{- shown ? shown|join(', ') : '—' -}}
+                        </td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+{% endblock %}

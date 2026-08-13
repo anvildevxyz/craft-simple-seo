@@ -1,0 +1,24 @@
+{# ========================================================================= #}
+{# Settings read-only notice                                                 #}
+{#                                                                           #}
+{# The four settings screens share two independent gates: permission to      #}
+{# save, and project config being writable. The note names the one that      #}
+{# actually applies. Renders nothing when both gates are open.               #}
+{#                                                                           #}
+{# Params: canManage (bool), allowAdminChanges (bool), configMessage         #}
+{# (already translated).                                                     #}
+{# ========================================================================= #}
+
+{% if not canManage %}
+    <div class="readable">
+        <blockquote class="note tip">
+            {{ 'You don’t have permission to change these settings.'|t('simple-seo') }}
+        </blockquote>
+    </div>
+{% elseif not allowAdminChanges %}
+    <div class="readable">
+        <blockquote class="note tip">
+            {{ configMessage }}
+        </blockquote>
+    </div>
+{% endif %}

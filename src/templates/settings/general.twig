@@ -1,0 +1,81 @@
+{# ========================================================================= #}
+{# Simple SEO — General settings                                             #}
+{#                                                                           #}
+{# One site at a time (header site selector). Storage split: title format +  #}
+{# default description are project config (read-only when allowAdminChanges  #}
+{# is off); the default social image is a DB-side asset reference and stays  #}
+{# editable in every environment.                                            #}
+{# ========================================================================= #}
+
+{% extends 'simple-seo/settings/_layout' %}
+{% import '_includes/forms' as forms %}
+
+{% set selectedSubnavItem = 'general' %}
+
+{# Two independent gates: the permission to save at all, and project config
+   being writable. The social image is DB-side, so it only needs the first. #}
+{% set canEditConfig = canManageSettings and allowAdminChanges %}
+{% set fullPageForm = canManageSettings %}
+
+{% block content %}
+    {{ actionInput('simple-seo/settings/save') }}
+    {{ redirectInput(redirectUrl) }}
+    {{ hiddenInput('siteUid', currentSite.uid) }}
+
+    {% include 'simple-seo/_includes/settings-readonly-notice.twig' with {
+        canManage: canManageSettings,
+        allowAdminChanges: allowAdminChanges,
+        configMessage: 'Title formats and default descriptions are managed in project config and are read-only in this environment. Default social images are stored in the database and stay editable.'|t('simple-seo'),
+    } only %}
+
+    {# First-run pointer: without an SEO field the settings on this screen
+       apply, but entries offer no controls and no tags render — the three
+       setup steps live nowhere else in the CP. Gone once a field exists. #}
+    {% if not hasSeoField %}
+        <div class="readable">
+            <blockquote class="note tip">
+                {{ 'Entries get their SEO controls from a field of type “SEO” — create one and add it to your entry types.'|t('simple-seo') }}
+                {{ 'Render the tags in your layout:'|t('simple-seo') }}
+                <code>{{ '{{ craft.simpleSeo.renderMeta(entry) }}' }}</code>
+            </blockquote>
+        </div>
+    {% endif %}
+
+    {% set config = settings.siteSettings[currentSite.uid] ?? {} %}
+
+    {# `first` only when no note precedes the field. #}
+    {{ forms.textField({
+        label: 'Title format'|t('simple-seo'),
+        instructions: 'Tokens: `{title}`, `{siteName}`.'|t('simple-seo'),
+        id: 'titleFormat',
+        name: 'titleFormat',
+        value: config.titleFormat ?? null,
+        placeholder: defaultTitleFormat,
+        first: canEditConfig and hasSeoField,
+        disabled: not canEditConfig,
+        errors: settings.getErrors('siteSettings.' ~ currentSite.uid ~ '.titleFormat'),
+    }) }}
+
+    {{ forms.textareaField({
+        label: 'Default meta description'|t('simple-seo'),
+        instructions: 'Used when an entry has none.'|t('simple-seo'),
+        id: 'defaultDescription',
+        name: 'defaultDescription',
+        value: config.defaultDescription ?? null,
+        rows: 2,
+        disabled: not canEditConfig,
+    }) }}
+
+    {{ forms.elementSelectField({
+        label: 'Default social image'|t('simple-seo'),
+        instructions: 'Used when an entry has none.'|t('simple-seo'),
+        id: 'defaultSocialImage',
+        name: 'defaultSocialImage',
+        elementType: assetElementType,
+        single: true,
+        criteria: { kind: ['image'] },
+        selectionLabel: 'Choose an image'|t('simple-seo'),
+        elements: image,
+        disabled: not canManageSettings,
+    }) }}
+{% endblock %}

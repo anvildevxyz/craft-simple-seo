@@ -1,0 +1,143 @@
+{# ========================================================================= #}
+{# SEO field input. Plain Craft form macros; all JS is delegated — see      #}
+{# SeoFieldAsset for why there is no per-instance init. The data-* attrs     #}
+{# carry everything the preview needs, embedded at render time.             #}
+{# ========================================================================= #}
+
+{% import '_includes/forms' as forms %}
+
+<div data-simple-seo-field
+    {%- if preview %}
+    data-site-name="{{ preview.siteName }}"
+    data-title-format="{{ preview.titleFormat }}"
+    data-fallback-title="{{ preview.fallbackTitle }}"
+    data-default-description="{{ preview.defaultDescription }}"
+    data-default-social-image-url="{{ preview.defaultSocialImageUrl }}"
+    data-description-placeholder="{{ preview.descriptionPlaceholder }}"
+    {%- endif %}
+    data-over-message="{{ 'Over the recommended length: {count} of {limit} characters.'|t('simple-seo') }}"
+    data-ok-message="{{ 'Back within the recommended length.'|t('simple-seo') }}">
+
+    {# The robots pane renders exactly once, whichever surface shows it —
+       the preview's Robots tab, or inline below when there is no preview. #}
+    {% set robotsPane = null %}
+    {% if shows.robots or shows.robotsDirectives %}
+        {% set robotsPane %}
+            {%- include 'simple-seo/_field/robots.twig' with {
+                shows: shows,
+                value: value,
+                id: id,
+                name: name,
+                robotsDirectives: robotsDirectives,
+                directiveLabels: directiveLabels,
+            } only -%}
+        {% endset %}
+    {% endif %}
+
+    {% if preview %}
+        {% include 'simple-seo/_field/preview.twig' with {
+            preview: preview,
+            id: id,
+            robotsPane: robotsPane,
+        } only %}
+    {% endif %}
+
+    {% if shows.title %}
+        {{ forms.textField({
+            label: 'Meta title'|t('simple-seo'),
+            instructions: 'Overrides the entry title in results.'|t('simple-seo'),
+            id: id ~ '-title',
+            name: name ~ '[title]',
+            value: value.title,
+            first: not shows.preview,
+        }) }}
+        {# The counter measures the title as results show it — the full
+           formatted title, siteName suffix included — because that is the
+           string the character-limit guidance is about. Raw input length only
+           when no preview data exists to format with. Initial state classes
+           mirror the JS thresholds (limit, limit * nearRatio) — keep in
+           lockstep with applyCount() in seo-field.js. #}
+        {% set titleCount = preview ? preview.serpTitle|length : (value.title ?? '')|length %}
+        <div class="simple-seo-counter{{ titleCount > titleLimit ? ' simple-seo-counter--over' : (titleCount >= titleNearLimit ? ' simple-seo-counter--near' : '') }}"
+            data-counter-for="{{ (id ~ '-title')|namespaceInputId }}"
+            data-limit="{{ titleLimit }}"
+            data-near-ratio="{{ nearRatio }}"
+            {%- if preview %} data-counter-formatted{% endif %}>
+            <span aria-hidden="true"><span data-count>{{ titleCount }}</span>/{{ titleLimit }}</span>
+        </div>
+    {% elseif value.title %}
+        {{ hiddenInput(name ~ '[title]', value.title) }}
+    {% endif %}
+
+    {% if shows.description %}
+        {{ forms.textareaField({
+            label: 'Meta description'|t('simple-seo'),
+            instructions: 'Shown under the title in results.'|t('simple-seo'),
+            id: id ~ '-description',
+            name: name ~ '[description]',
+            value: value.description,
+            rows: 3,
+        }) }}
+        {% set descriptionCount = (value.description ?? '')|length %}
+        <div class="simple-seo-counter{{ descriptionCount > descriptionLimit ? ' simple-seo-counter--over' : (descriptionCount >= descriptionNearLimit ? ' simple-seo-counter--near' : '') }}"
+            data-counter-for="{{ (id ~ '-description')|namespaceInputId }}"
+            data-limit="{{ descriptionLimit }}"
+            data-near-ratio="{{ nearRatio }}">
+            <span aria-hidden="true"><span data-count>{{ descriptionCount }}</span>/{{ descriptionLimit }}</span>
+        </div>
+    {% elseif value.description %}
+        {{ hiddenInput(name ~ '[description]', value.description) }}
+    {% endif %}
+
+    {% if shows.socialImage %}
+        {{ forms.elementSelectField({
+            label: 'Social image'|t('simple-seo'),
+            instructions: 'Shown when shared on social platforms.'|t('simple-seo'),
+            id: id ~ '-socialImage',
+            name: name ~ '[socialImageId]',
+            elementType: assetElementType,
+            single: true,
+            criteria: { kind: ['image'] },
+            selectionLabel: 'Choose an image'|t('simple-seo'),
+            elements: value.socialImage ? [value.socialImage] : [],
+        }) }}
+    {% elseif value.socialImageId %}
+        {{ hiddenInput(name ~ '[socialImageId]', value.socialImageId) }}
+    {% endif %}
+
+    {# With a preview, the robots pane lives on its Robots tab; without one
+       (inline editing, the field defaults screen, preview sub-field off) it
+       renders here instead. Hidden sub-fields round-trip through hidden
+       inputs either way, so nothing stored is ever discarded. #}
+    {% if robotsPane is not null and not preview %}
+        {% if shows.title or shows.description or shows.socialImage %}
+            <hr>
+        {% endif %}
+        {{ robotsPane }}
+    {% endif %}
+
+    {% if not shows.robots %}
+        {{ hiddenInput(name ~ '[noindex]', value.noindex ? '1' : '') }}
+        {{ hiddenInput(name ~ '[nofollow]', value.nofollow ? '1' : '') }}
+    {% endif %}
+
+    {% if not shows.robotsDirectives %}
+        {% for directive in value.robotsDirectives %}
+            {{ hiddenInput(name ~ '[robotsDirectives][]', directive) }}
+        {% endfor %}
+    {% endif %}
+
+    {% if shows.canonical %}
+        {{ forms.textField({
+            label: 'Canonical URL override'|t('simple-seo'),
+            instructions: 'Only when the content lives canonically elsewhere.'|t('simple-seo'),
+            id: id ~ '-canonical',
+            name: name ~ '[canonical]',
+            value: value.canonical,
+            type: 'url',
+            placeholder: 'https://',
+        }) }}
+    {% elseif value.canonical %}
+        {{ hiddenInput(name ~ '[canonical]', value.canonical) }}
+    {% endif %}
+</div>

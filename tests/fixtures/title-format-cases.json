@@ -1,0 +1,66 @@
+[
+    {
+        "note": "default format appends the site name",
+        "title": "About us",
+        "fallback": "Fallback",
+        "siteName": "Acme",
+        "format": null,
+        "expected": "About us - Acme"
+    },
+    {
+        "note": "falls back to the element title",
+        "title": null,
+        "fallback": "Fallback",
+        "siteName": "Acme",
+        "format": null,
+        "expected": "Fallback - Acme"
+    },
+    {
+        "note": "site name is never doubled (ethercreative/seo#330)",
+        "title": "About us - Acme",
+        "fallback": "",
+        "siteName": "Acme",
+        "format": null,
+        "expected": "About us - Acme"
+    },
+    {
+        "note": "site name is never doubled when embedded (ethercreative/seo#330)",
+        "title": "Acme: the story",
+        "fallback": "",
+        "siteName": "Acme",
+        "format": null,
+        "expected": "Acme: the story"
+    },
+    {
+        "note": "a format without {siteName} never gains one (ethercreative/seo#376)",
+        "title": "About us",
+        "fallback": "",
+        "siteName": "Acme",
+        "format": "{title}",
+        "expected": "About us"
+    },
+    {
+        "note": "no title at all yields the bare site name, no dangling separator",
+        "title": null,
+        "fallback": "",
+        "siteName": "Acme",
+        "format": null,
+        "expected": "Acme"
+    },
+    {
+        "note": "whitespace-only title yields the bare site name",
+        "title": "   ",
+        "fallback": "",
+        "siteName": "Acme",
+        "format": null,
+        "expected": "Acme"
+    },
+    {
+        "note": "special characters pass through untouched",
+        "title": "100% Zürich — 🚀 \"Home\"",
+        "fallback": "",
+        "siteName": "Acme & Co",
+        "format": null,
+        "expected": "100% Zürich — 🚀 \"Home\" - Acme & Co"
+    }
+]

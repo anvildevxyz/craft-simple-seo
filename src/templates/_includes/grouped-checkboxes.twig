@@ -1,0 +1,36 @@
+{# ========================================================================= #}
+{# Grouped checkbox list                                                     #}
+{#                                                                           #}
+{# The one place the grouped-control markup lives: h6 group headings over    #}
+{# native checkbox-groups, shared by the install-wide Fields screen and the  #}
+{# per-field settings.                                                       #}
+{#                                                                           #}
+{# One hidden input, rendered once before every checkbox: a later hidden     #}
+{# input sharing the name would reset PHP's array parse and wipe earlier     #}
+{# groups' selections.                                                       #}
+{#                                                                           #}
+{# Params: name, groups ([{label, options: [{label, value}]}]), values,      #}
+{# disabled (optional).                                                      #}
+{# ========================================================================= #}
+
+{% import '_includes/forms' as forms %}
+
+{% set disabled = disabled ?? false %}
+
+{{ hiddenInput(name, '', { disabled: disabled }) }}
+{% for group in groups %}
+    <h6>{{ group.label }}</h6>
+    <div class="checkbox-group">
+        {% for option in group.options %}
+            <div>
+                {{ forms.checkbox({
+                    label: option.label,
+                    value: option.value,
+                    name: name ~ '[]',
+                    checked: option.value in values,
+                    disabled: disabled,
+                }) }}
+            </div>
+        {% endfor %}
+    </div>
+{% endfor %}
