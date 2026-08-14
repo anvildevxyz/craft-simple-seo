@@ -102,7 +102,10 @@ class AuditService extends Component
                 $uri = (string)$entry->uri;
                 $id = (int)$entry->id;
 
-                $resolved = $meta->resolve($entry);
+                // One field read serves both the resolution and the own-value
+                // check below — resolve() would scan the field layout again.
+                $value = SeoFieldReader::read($entry);
+                $resolved = $value !== null ? $meta->resolveFromValue($entry, $value) : $meta->resolve($entry);
                 $title = trim((string)$resolved->title);
                 $description = trim((string)$resolved->description);
 
@@ -111,7 +114,7 @@ class AuditService extends Component
                 // same site default, so counting those as duplicates would
                 // bury the actual finding under one row per page — the noise
                 // that makes audits get ignored.
-                $own = trim((string)(SeoFieldReader::read($entry)?->description ?? ''));
+                $own = trim((string)($value?->description ?? ''));
 
                 if ($own === '') {
                     $report->add(

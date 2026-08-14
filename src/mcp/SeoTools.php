@@ -148,10 +148,12 @@ class SeoTools
     {
         return $this->_updateSeoValue($entryId, $siteHandle, static function(SeoData $value) use ($title, $description): void {
             if ($title !== null) {
-                $value->title = trim($title) !== '' ? trim($title) : null;
+                $title = trim($title);
+                $value->title = $title !== '' ? $title : null;
             }
             if ($description !== null) {
-                $value->description = trim($description) !== '' ? trim($description) : null;
+                $description = trim($description);
+                $value->description = $description !== '' ? $description : null;
             }
         });
     }

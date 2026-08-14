@@ -409,6 +409,8 @@ class SeoField extends Field implements PreviewableFieldInterface
             $view->registerAssetBundle(SeoFieldAsset::class);
         }
 
+        $subfieldKeys = array_keys(self::SUBFIELDS);
+
         return $view->renderTemplate('simple-seo/_field/input.twig', [
             'id' => Html::id($this->handle),
             'name' => $this->handle,
@@ -422,8 +424,8 @@ class SeoField extends Field implements PreviewableFieldInterface
             'descriptionNearLimit' => (int) floor(self::DESCRIPTION_LIMIT * self::LIMIT_NEAR_RATIO),
             'nearRatio' => self::LIMIT_NEAR_RATIO,
             'shows' => array_combine(
-                array_keys(self::SUBFIELDS),
-                array_map(fn(string $key): bool => $this->showsSubfield($key), array_keys(self::SUBFIELDS)),
+                $subfieldKeys,
+                array_map($this->showsSubfield(...), $subfieldKeys),
             ),
             'preview' => $inline || !$this->showsSubfield('preview')
                 ? null

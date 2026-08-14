@@ -70,14 +70,13 @@ class DoctorController extends Controller
         // routinely wider than a guessed width, and padding has to be
         // character-aware — str_pad() counts bytes, so one "Français" would
         // shift every row after it.
-        $siteWidth = 4 + max(array_map(
-            static fn(Finding $f): int => mb_strlen($f->site ?? '—'),
-            $shown ?: [new Finding()],
-        ));
-        $checkWidth = 4 + max(array_map(
-            static fn(Finding $f): int => mb_strlen($f->check),
-            $shown ?: [new Finding()],
-        ));
+        $maxSite = $maxCheck = 0;
+        foreach ($shown ?: [new Finding()] as $f) {
+            $maxSite = max($maxSite, mb_strlen($f->site ?? '—'));
+            $maxCheck = max($maxCheck, mb_strlen($f->check));
+        }
+        $siteWidth = 4 + $maxSite;
+        $checkWidth = 4 + $maxCheck;
 
         foreach ($shown as $finding) {
             [$mark, $color] = match ($finding->level) {

@@ -441,6 +441,7 @@ class SitemapService extends Component
             $byElement[(int)$row['elementId']][] = $row;
         }
 
+        $sites = Craft::$app->getSites();
         $alternates = [];
         foreach ($byElement as $id => $elementRows) {
             if (count($elementRows) < 2) {
@@ -448,7 +449,7 @@ class SitemapService extends Component
             }
             $links = [];
             foreach ($elementRows as $row) {
-                $rowSite = Craft::$app->getSites()->getSiteById((int)$row['siteId']);
+                $rowSite = $sites->getSiteById((int)$row['siteId']);
                 if ($rowSite === null) {
                     continue;
                 }

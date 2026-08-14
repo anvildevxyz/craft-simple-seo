@@ -359,6 +359,8 @@ class SettingsController extends Controller
         $plugin = Plugin::getInstance();
         $sitemap = $plugin->getSitemap();
 
+        $priorityValues = array_map(static fn(int $i): string => number_format($i / 10, 1, '.', ''), range(10, 0, -1));
+
         return $this->_sharedVariables($site) + [
             // Same per-section diagnosis as /sitemap.xml?explain — counts and
             // the reason a section is missing, which is the question this
@@ -368,10 +370,7 @@ class SettingsController extends Controller
             'rows' => $sitemap->explain($site),
             'priorities' => $plugin->getSettings()->sitemapPriorities[$site->uid] ?? [],
             // Blank first: no priority is the default, and emits no element.
-            'priorityOptions' => ['' => Craft::t('simple-seo', '—')] + array_combine(
-                array_map(static fn(int $i): string => number_format($i / 10, 1, '.', ''), range(10, 0, -1)),
-                array_map(static fn(int $i): string => number_format($i / 10, 1, '.', ''), range(10, 0, -1)),
-            ),
+            'priorityOptions' => ['' => Craft::t('simple-seo', '—')] + array_combine($priorityValues, $priorityValues),
             'sitemapUrl' => $plugin->getRobots()->sitemapUrl($site),
             'sitemapBaseUrl' => UrlHelper::siteUrl('sitemaps/', null, null, (int)$site->id),
             'redirectUrl' => $this->_cpUrl('simple-seo/settings/sitemap', $site),
@@ -410,7 +409,9 @@ class SettingsController extends Controller
      */
     private function _robotsVariables(Site $site): array
     {
-        $robots = Plugin::getInstance()->getRobots();
+        $plugin = Plugin::getInstance();
+        $settings = $plugin->getSettings();
+        $robots = $plugin->getRobots();
         $custom = $robots->customForSite($site);
 
         return $this->_sharedVariables($site) + [
@@ -418,8 +419,8 @@ class SettingsController extends Controller
             // forces the file on, and a toggle showing "on" for a site the
             // author switched off would misreport what is saved. The notice
             // below explains the override instead.
-            'robotsTxtEnabled' => Plugin::getInstance()->getSettings()->robotsTxtEnabled[$site->uid] ?? true,
-            'lockdownForcesRobots' => Plugin::getInstance()->getSettings()->siteWideNoindex,
+            'robotsTxtEnabled' => $settings->robotsTxtEnabled[$site->uid] ?? true,
+            'lockdownForcesRobots' => $settings->siteWideNoindex,
             'robotsTxt' => $custom,
             'defaultRobotsTxt' => $robots->defaultForSite($site),
             'sitemapToken' => RobotsService::SITEMAP_TOKEN,
