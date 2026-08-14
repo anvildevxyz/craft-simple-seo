@@ -103,12 +103,11 @@ class GraphQlFullCest
         $site = Craft::$app->getSites()->getPrimarySite();
         $plugin = Plugin::getInstance();
 
-        $saved = Craft::$app->getPlugins()->savePluginSettings($plugin, [
+        $I->seedPluginSettings([
             'siteSettings' => [
                 $site->uid => ['defaultDescription' => 'GQL default description.'],
             ],
         ]);
-        $I->assertTrue($saved, json_encode($plugin->getSettings()->getErrors()) ?: '');
 
         $result = Craft::$app->getGql()->executeQuery($fx['schema'], <<<'GQL'
             { entries(section: "gqlFullPages", slug: "bare") {

@@ -117,15 +117,7 @@ class SettingsController extends Controller
             $settings->projectConfigPayload(['availableSubfields' => $available]),
         );
 
-        if (!$saved) {
-            $this->setFailFlash(Craft::t('simple-seo', 'Couldn’t save settings.'));
-
-            return $this->renderTemplate('simple-seo/settings/fields.twig', $this->_fieldsVariables());
-        }
-
-        $this->setSuccessFlash(Craft::t('simple-seo', 'Settings saved.'));
-
-        return $this->redirectToPostedUrl();
+        return $this->_saveOutcome($saved, 'simple-seo/settings/fields.twig', fn(): array => $this->_fieldsVariables());
     }
 
     /**
@@ -157,17 +149,17 @@ class SettingsController extends Controller
             );
 
             if (!$saved) {
-                $this->setFailFlash(Craft::t('simple-seo', 'Couldn’t save settings.'));
-
                 // Re-render with the image they picked, not the stored one —
                 // nothing was persisted, so the stored value would silently
                 // discard their selection.
-                $variables = $this->_generalVariables($site);
-                $variables['image'] = array_values(array_filter([
-                    $assetId !== null ? Asset::find()->id($assetId)->one() : null,
-                ]));
+                return $this->_saveOutcome(false, 'simple-seo/settings/general.twig', function() use ($site, $assetId): array {
+                    $variables = $this->_generalVariables($site);
+                    $variables['image'] = array_values(array_filter([
+                        $assetId !== null ? Asset::find()->id($assetId)->one() : null,
+                    ]));
 
-                return $this->renderTemplate('simple-seo/settings/general.twig', $variables);
+                    return $variables;
+                });
             }
         }
 
@@ -175,9 +167,7 @@ class SettingsController extends Controller
         // the inverse partial save.
         $plugin->getSiteDefaults()->saveDefaultSocialImageId((int)$site->id, $assetId);
 
-        $this->setSuccessFlash(Craft::t('simple-seo', 'Settings saved.'));
-
-        return $this->redirectToPostedUrl();
+        return $this->_saveOutcome(true, 'simple-seo/settings/general.twig', fn(): array => $this->_generalVariables($site));
     }
 
     /**
@@ -209,15 +199,11 @@ class SettingsController extends Controller
         $priorities = array_map('strval', $priorities);
         $enabled = (bool)$this->request->getBodyParam('sitemapEnabled', false);
 
-        if (!$plugin->getSitemap()->saveSiteSettings($site, $checked, $priorities, $enabled)) {
-            $this->setFailFlash(Craft::t('simple-seo', 'Couldn’t save settings.'));
-
-            return $this->renderTemplate('simple-seo/settings/sitemap.twig', $this->_sitemapVariables($site));
-        }
-
-        $this->setSuccessFlash(Craft::t('simple-seo', 'Settings saved.'));
-
-        return $this->redirectToPostedUrl();
+        return $this->_saveOutcome(
+            $plugin->getSitemap()->saveSiteSettings($site, $checked, $priorities, $enabled),
+            'simple-seo/settings/sitemap.twig',
+            fn(): array => $this->_sitemapVariables($site),
+        );
     }
 
     /**
@@ -238,19 +224,35 @@ class SettingsController extends Controller
         $body = is_string($body) ? $body : '';
         $enabled = (bool)$this->request->getBodyParam('robotsTxtEnabled', false);
 
-        if (!Plugin::getInstance()->getRobots()->saveSiteSettings($site, $body, $enabled)) {
+        return $this->_saveOutcome(
+            Plugin::getInstance()->getRobots()->saveSiteSettings($site, $body, $enabled),
+            'simple-seo/settings/robots.twig',
+            fn(): array => $this->_robotsVariables($site),
+        );
+    }
+
+    // Private Methods
+    // =========================================================================
+
+    /**
+     * The shared tail of every settings save: flash + re-render on failure,
+     * flash + redirect on success. The two flash strings live here and
+     * nowhere else; the variables closure only runs on failure.
+     *
+     * @param callable(): array<string, mixed> $variables
+     */
+    private function _saveOutcome(bool $saved, string $template, callable $variables): Response
+    {
+        if (!$saved) {
             $this->setFailFlash(Craft::t('simple-seo', 'Couldn’t save settings.'));
 
-            return $this->renderTemplate('simple-seo/settings/robots.twig', $this->_robotsVariables($site));
+            return $this->renderTemplate($template, $variables());
         }
 
         $this->setSuccessFlash(Craft::t('simple-seo', 'Settings saved.'));
 
         return $this->redirectToPostedUrl();
     }
-
-    // Private Methods
-    // =========================================================================
 
     /**
      * Guards the project-config writes. `allowAdminChanges` is orthogonal to

@@ -2,7 +2,9 @@
 
 namespace anvildev\simpleseo\console\controllers;
 
+use anvildev\simpleseo\helpers\Lookup;
 use anvildev\simpleseo\Plugin;
+use anvildev\simpleseo\services\SitemapService;
 use Craft;
 use craft\console\Controller;
 use craft\helpers\Console;
@@ -73,7 +75,7 @@ class SitemapController extends Controller
 
             foreach ($sitemap->explain($site) as $row) {
                 $this->stdout('  ' . ($row['included'] ? '✓' : '✗') . ' ', $row['included'] ? Console::FG_GREEN : Console::FG_GREY);
-                $this->stdout(sprintf('%-28s %6d URLs  %s' . "\n", $row['section'], $row['urls'], $row['reason']));
+                $this->stdout(SitemapService::explainLine($row) . "\n");
 
                 // An included section with no URLs is the case worth failing
                 // a build over: it is in the index, so the file exists and is
@@ -124,9 +126,9 @@ class SitemapController extends Controller
             return Craft::$app->getSites()->getAllSites();
         }
 
-        $site = Craft::$app->getSites()->getSiteByHandle($this->site);
-        if ($site === null) {
-            $this->stderr("No site with handle “{$this->site}”.\n", Console::FG_RED);
+        $site = Lookup::site($this->site);
+        if (is_string($site)) {
+            $this->stderr($site . "\n", Console::FG_RED);
 
             return [];
         }

@@ -213,11 +213,8 @@ class EtherMigrationService extends Component
             $offset += 200;
 
             foreach ($rows as $row) {
-                $content = Json::decodeIfJson($row['content']);
-                if (is_string($content)) {
-                    $content = Json::decodeIfJson($content);
-                }
-                if (!is_array($content)) {
+                $content = SeoFieldReader::decodeContentDocument($row['content']);
+                if ($content === null) {
                     continue;
                 }
 
@@ -226,8 +223,8 @@ class EtherMigrationService extends Component
                     if (!isset($content[$uid])) {
                         continue;
                     }
-                    $value = Json::decodeIfJson($content[$uid]);
-                    if (!is_array($value)) {
+                    $value = SeoFieldReader::decodeFieldValue($content, $uid);
+                    if ($value === null) {
                         continue;
                     }
 

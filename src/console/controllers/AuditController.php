@@ -5,7 +5,6 @@ namespace anvildev\simpleseo\console\controllers;
 use anvildev\simpleseo\helpers\Lookup;
 use anvildev\simpleseo\models\AuditReport;
 use anvildev\simpleseo\Plugin;
-use Craft;
 use craft\console\Controller;
 use craft\helpers\Console;
 use craft\helpers\Json;
@@ -77,10 +76,13 @@ class AuditController extends Controller
             return ExitCode::UNSPECIFIED_ERROR;
         }
 
-        if ($this->section !== null && Craft::$app->getEntries()->getSectionByHandle($this->section) === null) {
-            $this->stderr("No section with handle “{$this->section}”.\n", Console::FG_RED);
+        if ($this->section !== null) {
+            $section = Lookup::section($this->section);
+            if (is_string($section)) {
+                $this->stderr($section . "\n", Console::FG_RED);
 
-            return ExitCode::UNSPECIFIED_ERROR;
+                return ExitCode::UNSPECIFIED_ERROR;
+            }
         }
 
         // Progress only on a real, human-facing terminal: \r is literal in a

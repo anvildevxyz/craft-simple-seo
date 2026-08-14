@@ -3,6 +3,7 @@
 namespace anvildev\simpleseo\services;
 
 use anvildev\simpleseo\helpers\TitleFormatter;
+use anvildev\simpleseo\models\Settings;
 use anvildev\simpleseo\models\SiteDefaults;
 use anvildev\simpleseo\Plugin;
 use anvildev\simpleseo\records\SiteSettings as SiteSettingsRecord;
@@ -103,11 +104,7 @@ class SiteDefaultsService extends Component
             'defaultDescription' => trim($defaultDescription),
         ], static fn(string $value): bool => $value !== '');
 
-        $siteSettings = $settings->siteSettings;
-        unset($siteSettings[$site->uid]);
-        if ($config !== []) {
-            $siteSettings[$site->uid] = $config;
-        }
+        $siteSettings = Settings::withSiteSlice($settings->siteSettings, (string)$site->uid, $config);
 
         $saved = Craft::$app->getPlugins()->savePluginSettings(
             $plugin,

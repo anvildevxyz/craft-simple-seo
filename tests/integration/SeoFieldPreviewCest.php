@@ -6,7 +6,6 @@ use anvildev\simpleseo\fields\SeoField;
 use anvildev\simpleseo\helpers\TitleFormatter;
 use Craft;
 use craft\elements\Entry;
-use craft\web\View;
 use IntegrationTester;
 
 /**
@@ -32,7 +31,7 @@ class SeoFieldPreviewCest
             'description' => 'A description that should appear verbatim.',
         ]);
 
-        $html = $this->_renderInput($field, $entry);
+        $html = $I->renderSeoFieldInput($field, $entry);
         $site = Craft::$app->getSites()->getPrimarySite();
 
         $I->assertStringContainsString('data-simple-seo-field', $html);
@@ -60,14 +59,7 @@ class SeoFieldPreviewCest
     {
         [$field] = $this->_fixture($I, null);
 
-        $view = Craft::$app->getView();
-        $originalMode = $view->getTemplateMode();
-        $view->setTemplateMode(View::TEMPLATE_MODE_CP);
-        try {
-            $html = $field->getInputHtml($field->normalizeValue(null), null);
-        } finally {
-            $view->setTemplateMode($originalMode);
-        }
+        $html = $I->renderSeoFieldInput($field, null);
 
         $I->assertStringContainsString('data-simple-seo-field', $html);
         $I->assertStringNotContainsString('simple-seo-preview', $html);
@@ -82,7 +74,7 @@ class SeoFieldPreviewCest
     public function robotsControlsRenderOnTheRobotsTab(IntegrationTester $I): void
     {
         [$field, $entry] = $this->_fixture($I, ['noindex' => true]);
-        $html = $this->_renderInput($field, $entry);
+        $html = $I->renderSeoFieldInput($field, $entry);
 
         $I->assertStringNotContainsString('data-preview-noindex', $html);
         $I->assertStringContainsString('data-preview-tab="robots"', $html);
@@ -97,21 +89,6 @@ class SeoFieldPreviewCest
 
     // Private Methods
     // =========================================================================
-
-    /**
-     * Renders the field input in CP template mode, restoring the mode after.
-     */
-    private function _renderInput(SeoField $field, Entry $entry): string
-    {
-        $view = Craft::$app->getView();
-        $originalMode = $view->getTemplateMode();
-        $view->setTemplateMode(View::TEMPLATE_MODE_CP);
-        try {
-            return $field->getInputHtml($entry->getFieldValue('seo'), $entry);
-        } finally {
-            $view->setTemplateMode($originalMode);
-        }
-    }
 
     /**
      * Creates the field + section fixture and one saved entry.

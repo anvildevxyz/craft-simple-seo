@@ -177,6 +177,19 @@ class SitemapService extends Component
     }
 
     /**
+     * One explain row as the fixed-width text line the two diagnosis
+     * surfaces print — `/sitemap.xml?explain` and `sitemap/explain` are
+     * documented twins, so the column layout must exist exactly once.
+     * Callers prepend their own ✓/✗ mark (the console colors it).
+     *
+     * @param SitemapExplainRow $row
+     */
+    public static function explainLine(array $row): string
+    {
+        return sprintf('%-28s %6d URLs  %s', $row['section'], $row['urls'], $row['reason']);
+    }
+
+    /**
      * The full per-section diagnosis — why each section is or isn't in the
      * sitemap, and with how many URLs. Never cached; this is the debug view.
      *
@@ -283,11 +296,7 @@ class SitemapService extends Component
             }
         }
 
-        $excludedSections = $settings->sitemapExcludedSections;
-        unset($excludedSections[$site->uid]);
-        if ($excluded !== []) {
-            $excludedSections[$site->uid] = $excluded;
-        }
+        $excludedSections = Settings::withSiteSlice($settings->sitemapExcludedSections, (string)$site->uid, $excluded);
 
         $clean = [];
         foreach ($priorities as $sectionUid => $priority) {
@@ -297,11 +306,7 @@ class SitemapService extends Component
             }
         }
 
-        $prioritiesBySite = $settings->sitemapPriorities;
-        unset($prioritiesBySite[$site->uid]);
-        if ($clean !== []) {
-            $prioritiesBySite[$site->uid] = $clean;
-        }
+        $prioritiesBySite = Settings::withSiteSlice($settings->sitemapPriorities, (string)$site->uid, $clean);
 
         // Section choices and priorities are kept even when the sitemap is
         // switched off, so turning it back on restores the configuration.

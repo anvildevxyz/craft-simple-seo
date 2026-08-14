@@ -87,25 +87,55 @@ final class SeoFieldReader
             return false;
         }
 
-        $content = Json::decodeIfJson($content);
-        if (is_string($content)) {
-            $content = Json::decodeIfJson($content);
-        }
-        if (!is_array($content)) {
+        $content = self::decodeContentDocument($content);
+        if ($content === null) {
             return false;
         }
 
         foreach (self::_layoutElementUids() as $uid) {
-            $value = $content[$uid] ?? null;
-            if (is_string($value)) {
-                $value = Json::decodeIfJson($value);
-            }
-            if (is_array($value) && ($value['noindex'] ?? false) === true) {
+            $value = self::decodeFieldValue($content, $uid);
+            if ($value !== null && ($value['noindex'] ?? false) === true) {
                 return true;
             }
         }
 
         return false;
+    }
+
+    /**
+     * Decodes a raw elements_sites.content document: a JSON string (MySQL),
+     * an already-decoded array (PostgreSQL), sometimes double-encoded. The
+     * one tolerant parse both the sitemap hot path and the ether migration
+     * rely on — a cross-DB shape fix must land in exactly one place.
+     *
+     * @return array<array-key, mixed>|null
+     */
+    public static function decodeContentDocument(mixed $content): ?array
+    {
+        $content = Json::decodeIfJson($content);
+        if (is_string($content)) {
+            $content = Json::decodeIfJson($content);
+        }
+
+        return is_array($content) ? $content : null;
+    }
+
+    /**
+     * One field's value out of a decoded content document, tolerating a
+     * still-encoded nested value. Null when the key is absent or the value
+     * is not an object.
+     *
+     * @param array<array-key, mixed> $document
+     * @return array<array-key, mixed>|null
+     */
+    public static function decodeFieldValue(array $document, string $layoutElementUid): ?array
+    {
+        $value = $document[$layoutElementUid] ?? null;
+        if (is_string($value)) {
+            $value = Json::decodeIfJson($value);
+        }
+
+        return is_array($value) ? $value : null;
     }
 
     /**
