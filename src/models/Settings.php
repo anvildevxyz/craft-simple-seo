@@ -189,6 +189,26 @@ class Settings extends Model
     }
 
     /**
+     * Merges one site's value slice into a per-site map — the value variant
+     * of {@see withSiteToggle()}. An empty value removes the key: absent
+     * means "default", which resolution and project-config diffs rely on,
+     * so no save may ever store an empty slice.
+     *
+     * @param array<string, mixed> $map
+     * @param array<array-key, mixed>|string|null $value
+     * @return array<string, mixed>
+     */
+    public static function withSiteSlice(array $map, string $siteUid, array|string|null $value): array
+    {
+        unset($map[$siteUid]);
+        if ($value !== null && $value !== '' && $value !== []) {
+            $map[$siteUid] = $value;
+        }
+
+        return $map;
+    }
+
+    /**
      * Validates each site's title format: a non-empty format must contain the
      * {title} token, or every page on the site would share one title
      * (ethercreative/seo#472-class misconfiguration, caught at save).

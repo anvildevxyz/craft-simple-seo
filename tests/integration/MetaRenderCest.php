@@ -104,12 +104,11 @@ class MetaRenderCest
         $site = Craft::$app->getSites()->getPrimarySite();
         $plugin = Plugin::getInstance();
 
-        $saved = Craft::$app->getPlugins()->savePluginSettings($plugin, [
+        $I->seedPluginSettings([
             'siteSettings' => [
                 $site->uid => ['defaultDescription' => 'Site default description.'],
             ],
         ]);
-        $I->assertTrue($saved, json_encode($plugin->getSettings()->getErrors()) ?: '');
 
         $entry = $this->_entry($I, null);
         $html = (string)$plugin->getMeta()->renderTags($entry);
@@ -173,12 +172,11 @@ class MetaRenderCest
         $site = Craft::$app->getSites()->getPrimarySite();
         $plugin = Plugin::getInstance();
 
-        $saved = Craft::$app->getPlugins()->savePluginSettings($plugin, [
+        $I->seedPluginSettings([
             'siteSettings' => [
                 $site->uid => ['defaultDescription' => 'Site default description.'],
             ],
         ]);
-        $I->assertTrue($saved, json_encode($plugin->getSettings()->getErrors()) ?: '');
 
         // Field values win.
         $withValues = $plugin->getMeta()->resolve($this->_entry($I, [

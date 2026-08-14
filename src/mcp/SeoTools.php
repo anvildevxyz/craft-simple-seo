@@ -73,8 +73,11 @@ class SeoTools
                 return ['error' => $site];
             }
 
-            if ($sectionHandle !== null && Craft::$app->getEntries()->getSectionByHandle($sectionHandle) === null) {
-                return ['error' => "No section with handle “{$sectionHandle}”."];
+            if ($sectionHandle !== null) {
+                $section = Lookup::section($sectionHandle);
+                if (is_string($section)) {
+                    return ['error' => $section];
+                }
             }
 
             return Plugin::getInstance()->getAudit()

@@ -141,15 +141,26 @@ class SeoData extends Model
             $directives[] = 'nofollow';
         }
 
-        // Preserve the canonical order from the constant, not the order the
-        // checkboxes happened to post in, so output is stable across saves.
-        foreach (self::ROBOTS_DIRECTIVES as $directive) {
-            if (in_array($directive, $this->robotsDirectives, true)) {
-                $directives[] = $directive;
-            }
-        }
+        $directives = [...$directives, ...self::canonicalizeDirectives($this->robotsDirectives)];
 
         return $directives !== [] ? implode(', ', $directives) : null;
+    }
+
+    /**
+     * Restricts directives to the supported set, deduplicated, in the
+     * constant's canonical order — not the order checkboxes happened to
+     * post in — so storage, settings, and rendered output are stable across
+     * saves and can never disagree on ordering.
+     *
+     * @param string[] $directives
+     * @return list<value-of<self::ROBOTS_DIRECTIVES>>
+     */
+    public static function canonicalizeDirectives(array $directives): array
+    {
+        return array_values(array_filter(
+            self::ROBOTS_DIRECTIVES,
+            static fn(string $directive): bool => in_array($directive, $directives, true),
+        ));
     }
 
     // Protected Methods

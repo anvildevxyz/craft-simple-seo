@@ -12,7 +12,6 @@ use craft\helpers\Db;
 use craft\services\Entries;
 use craft\web\Response;
 use craft\web\TemplateResponseFormatter;
-use craft\web\View;
 use IntegrationTester;
 
 /**
@@ -45,7 +44,7 @@ class SettingsScreensCest
         $this->_actAs($I, [Permissions::ACCESS, Permissions::MANAGE_SETTINGS, Permissions::MANAGE_ROBOTS]);
 
         foreach (['edit', 'edit-sitemap', 'edit-robots'] as $action) {
-            $html = $this->_render($action);
+            $html = $this->_render($I, $action);
             $I->assertNotSame('', $html, "simple-seo/settings/$action rendered nothing");
         }
     }
@@ -58,7 +57,7 @@ class SettingsScreensCest
     {
         $this->_actAs($I, [Permissions::ACCESS, Permissions::MANAGE_SETTINGS]);
 
-        $html = $this->_render('edit-fields');
+        $html = $this->_render($I, 'edit-fields');
 
         // The install-wide control list is the screen's whole purpose.
         $I->assertStringContainsString('availableSubfields', $html);
@@ -79,15 +78,15 @@ class SettingsScreensCest
         Db::delete(Table::FIELDS, ['type' => SeoField::class]);
         Craft::$app->getFields()->refreshFields();
 
-        $general = $this->_render('edit');
+        $general = $this->_render($I, 'edit');
         $I->assertStringContainsString('create one and add it to your entry types', $general);
         $I->assertStringContainsString('craft.simpleSeo.renderMeta(entry)', $general);
-        $I->assertStringContainsString('No SEO field exists yet.', $this->_render('edit-fields'));
+        $I->assertStringContainsString('No SEO field exists yet.', $this->_render($I, 'edit-fields'));
 
         $I->ensureSeoField();
 
-        $I->assertStringNotContainsString('create one and add it to your entry types', $this->_render('edit'));
-        $I->assertStringNotContainsString('No SEO field exists yet.', $this->_render('edit-fields'));
+        $I->assertStringNotContainsString('create one and add it to your entry types', $this->_render($I, 'edit'));
+        $I->assertStringNotContainsString('No SEO field exists yet.', $this->_render($I, 'edit-fields'));
     }
 
     /**
@@ -106,11 +105,11 @@ class SettingsScreensCest
         Db::delete(Table::SECTIONS);
         Craft::$app->set('entries', Entries::class);
 
-        $I->assertStringContainsString('No sections exist yet.', $this->_render('edit-sitemap'));
+        $I->assertStringContainsString('No sections exist yet.', $this->_render($I, 'edit-sitemap'));
 
         $I->createSeoSection('screenEmptyPages', ['uriFormat' => 'screen-empty/{slug}', 'template' => '_page']);
 
-        $html = $this->_render('edit-sitemap');
+        $html = $this->_render($I, 'edit-sitemap');
         $I->assertStringNotContainsString('No sections exist yet.', $html);
         $I->assertStringContainsString('No live entries yet.', $html);
     }
@@ -124,7 +123,7 @@ class SettingsScreensCest
         $this->_actAs($I, [Permissions::ACCESS]);
 
         foreach (['edit', 'edit-sitemap', 'edit-robots', 'edit-fields'] as $action) {
-            $html = $this->_render($action);
+            $html = $this->_render($I, $action);
             $I->assertNotSame('', $html, "simple-seo/settings/$action rendered nothing read-only");
         }
     }
@@ -136,21 +135,15 @@ class SettingsScreensCest
      * Runs a settings action and forces its deferred template render,
      * returning the HTML.
      */
-    private function _render(string $action): string
+    private function _render(IntegrationTester $I, string $action): string
     {
-        $view = Craft::$app->getView();
-        $mode = $view->getTemplateMode();
-        $view->setTemplateMode(View::TEMPLATE_MODE_CP);
-
-        try {
+        return (string)$I->inCpTemplateMode(static function() use ($action): string {
             /** @var Response $response */
             $response = Craft::$app->runAction("simple-seo/settings/$action");
             (new TemplateResponseFormatter())->format($response);
 
             return (string)$response->content;
-        } finally {
-            $view->setTemplateMode($mode);
-        }
+        });
     }
 
     /**

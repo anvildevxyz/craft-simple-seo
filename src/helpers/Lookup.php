@@ -4,6 +4,7 @@ namespace anvildev\simpleseo\helpers;
 
 use Craft;
 use craft\elements\Entry;
+use craft\models\Section;
 use craft\models\Site;
 
 /**
@@ -49,6 +50,21 @@ final class Lookup
         }
 
         return $entry;
+    }
+
+    /**
+     * The named section, or a printable error message.
+     *
+     * @return Section|string
+     */
+    public static function section(string $handle): Section|string
+    {
+        $section = Craft::$app->getEntries()->getSectionByHandle($handle);
+        if ($section === null) {
+            return "No section with handle “{$handle}”.";
+        }
+
+        return $section;
     }
 
     /**

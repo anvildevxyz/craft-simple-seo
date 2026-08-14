@@ -58,12 +58,11 @@ class GraphQlCest
         $site = Craft::$app->getSites()->getPrimarySite();
         $plugin = Plugin::getInstance();
 
-        $saved = Craft::$app->getPlugins()->savePluginSettings($plugin, [
+        $I->seedPluginSettings([
             'siteSettings' => [
                 $site->uid => ['defaultDescription' => 'Headless default description.'],
             ],
         ]);
-        $I->assertTrue($saved, json_encode($plugin->getSettings()->getErrors()) ?: '');
 
         [$schema] = $this->_fixture($I, ['noindex' => true]);
 
