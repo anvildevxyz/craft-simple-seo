@@ -40,18 +40,6 @@ class AuditService extends Component
     public const ISSUE_DUPLICATE_DESCRIPTION = 'duplicate description';
 
     /**
-     * @var string[] Issues that are reported but never fail the run.
-     *
-     * Leaning on a per-site default description is a documented feature of
-     * this plugin, not a defect. Failing a build for using it as designed
-     * would teach everyone to pass --tolerate permanently, which costs the
-     * gate its whole value.
-     */
-    public const ADVISORY = [
-        self::ISSUE_INHERITED_DESCRIPTION,
-    ];
-
-    /**
      * @var int Entries hydrated per batch.
      */
     public int $batchSize = 100;
@@ -65,9 +53,9 @@ class AuditService extends Component
      * Live and URL-having because those are the pages search engines actually
      * see — auditing drafts or URL-less entries would bury the real findings.
      *
-     * @param callable(int): void|null $onProgress Called with the running count.
+     * @param \Closure(int): void|null $onProgress Called with the running count.
      */
-    public function run(Site $site, ?string $sectionHandle = null, ?callable $onProgress = null): AuditReport
+    public function run(Site $site, ?string $sectionHandle = null, ?\Closure $onProgress = null): AuditReport
     {
         $report = new AuditReport();
         $meta = Plugin::getInstance()->getMeta();

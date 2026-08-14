@@ -94,11 +94,8 @@ class SitemapController extends Controller
      */
     private function _raw(string $data, string $contentType): Response
     {
-        $response = $this->response;
-        $response->format = Response::FORMAT_RAW;
-        $response->getHeaders()->set('Content-Type', "$contentType; charset=UTF-8");
-        $response->data = $data;
+        $this->response->getHeaders()->set('Content-Type', "$contentType; charset=UTF-8");
 
-        return $response;
+        return $this->asRaw($data);
     }
 }

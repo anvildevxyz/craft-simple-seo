@@ -5,6 +5,7 @@ namespace anvildev\simpleseo\tests\unit;
 use anvildev\simpleseo\fields\data\SeoData;
 use anvildev\simpleseo\fields\SeoField;
 use anvildev\simpleseo\helpers\TitleFormatter;
+use anvildev\simpleseo\models\AuditReport;
 use anvildev\simpleseo\services\AuditService;
 use PHPUnit\Framework\TestCase;
 
@@ -54,6 +55,17 @@ class SeoFieldContractsTest extends TestCase
     {
         $this->assertStringContainsString((string)SeoField::TITLE_LIMIT, AuditService::ISSUE_TITLE_LONG);
         $this->assertStringContainsString((string)SeoField::DESCRIPTION_LIMIT, AuditService::ISSUE_DESCRIPTION_LONG);
+    }
+
+    /**
+     * AuditReport::ADVISORY is a literal copy of ISSUE_INHERITED_DESCRIPTION,
+     * kept on the model rather than referenced from AuditService so the model
+     * stays a leaf and does not import a service. Nothing at runtime ties the
+     * two together, so this pins them in lockstep instead.
+     */
+    public function testAdvisoryMatchesInheritedDescriptionIssue(): void
+    {
+        $this->assertSame([AuditService::ISSUE_INHERITED_DESCRIPTION], AuditReport::ADVISORY);
     }
 
     /**

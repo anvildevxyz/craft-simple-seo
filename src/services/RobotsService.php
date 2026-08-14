@@ -2,6 +2,7 @@
 
 namespace anvildev\simpleseo\services;
 
+use anvildev\simpleseo\helpers\Coerce;
 use anvildev\simpleseo\models\Settings;
 use anvildev\simpleseo\Plugin;
 use Craft;
@@ -87,10 +88,7 @@ class RobotsService extends Component
      */
     public function customForSite(Site $site): ?string
     {
-        $stored = Plugin::getInstance()->getSettings()->robotsTxt[$site->uid] ?? null;
-        $stored = is_string($stored) ? trim($stored) : '';
-
-        return $stored !== '' ? $stored : null;
+        return Coerce::stringOrNull(Plugin::getInstance()->getSettings()->robotsTxt[$site->uid] ?? null);
     }
 
     /**

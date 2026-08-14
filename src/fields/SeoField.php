@@ -4,6 +4,7 @@ namespace anvildev\simpleseo\fields;
 
 use anvildev\simpleseo\fields\data\SeoData;
 use anvildev\simpleseo\gql\types\SeoDataType;
+use anvildev\simpleseo\helpers\Coerce;
 use anvildev\simpleseo\helpers\SiteUrl;
 use anvildev\simpleseo\Plugin;
 use anvildev\simpleseo\web\assets\seofield\SeoFieldAsset;
@@ -174,12 +175,12 @@ class SeoField extends Field implements PreviewableFieldInterface
         }
 
         return new SeoData([
-            'title' => $this->_nullableString($value['title'] ?? null),
-            'description' => $this->_nullableString($value['description'] ?? null),
+            'title' => Coerce::stringOrNull($value['title'] ?? null),
+            'description' => Coerce::stringOrNull($value['description'] ?? null),
             'socialImageId' => is_numeric($imageId) && (int)$imageId > 0 ? (int)$imageId : null,
             'noindex' => (bool)($value['noindex'] ?? false),
             'nofollow' => (bool)($value['nofollow'] ?? false),
-            'canonical' => $this->_nullableString($value['canonical'] ?? null),
+            'canonical' => Coerce::stringOrNull($value['canonical'] ?? null),
             'robotsDirectives' => $this->_robotsDirectives($value['robotsDirectives'] ?? null),
         ]);
     }
@@ -326,7 +327,7 @@ class SeoField extends Field implements PreviewableFieldInterface
     /**
      * Human labels for every supported robots directive.
      *
-     * @return array<string, string>
+     * @return array<value-of<SeoData::ROBOTS_DIRECTIVES>, string>
      */
     public static function robotsDirectiveLabels(): array
     {
@@ -501,20 +502,6 @@ class SeoField extends Field implements PreviewableFieldInterface
             'resolvedDescriptionIsPlaceholder' => $meta->description === null,
             'descriptionPlaceholder' => $placeholder,
         ];
-    }
-
-    /**
-     * Trims a posted value and collapses blank strings to null.
-     */
-    private function _nullableString(mixed $raw): ?string
-    {
-        if (!is_string($raw)) {
-            return null;
-        }
-
-        $raw = trim($raw);
-
-        return $raw === '' ? null : $raw;
     }
 
     /**

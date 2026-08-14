@@ -3,6 +3,7 @@
 namespace anvildev\simpleseo\mcp;
 
 use anvildev\simpleseo\fields\data\SeoData;
+use anvildev\simpleseo\helpers\Coerce;
 use anvildev\simpleseo\helpers\Lookup;
 use anvildev\simpleseo\helpers\SeoFieldReader;
 use anvildev\simpleseo\models\Finding;
@@ -148,12 +149,10 @@ class SeoTools
     {
         return $this->_updateSeoValue($entryId, $siteHandle, static function(SeoData $value) use ($title, $description): void {
             if ($title !== null) {
-                $title = trim($title);
-                $value->title = $title !== '' ? $title : null;
+                $value->title = Coerce::stringOrNull($title);
             }
             if ($description !== null) {
-                $description = trim($description);
-                $value->description = $description !== '' ? $description : null;
+                $value->description = Coerce::stringOrNull($description);
             }
         });
     }

@@ -50,11 +50,8 @@ class RobotsController extends Controller
             throw new NotFoundHttpException();
         }
 
-        $response = $this->response;
-        $response->format = Response::FORMAT_RAW;
-        $response->getHeaders()->set('Content-Type', 'text/plain; charset=UTF-8');
-        $response->data = $robots->contentForSite($site);
+        $this->response->getHeaders()->set('Content-Type', 'text/plain; charset=UTF-8');
 
-        return $response;
+        return $this->asRaw($robots->contentForSite($site));
     }
 }

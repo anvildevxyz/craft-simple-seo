@@ -33,7 +33,14 @@ trait ToolResponseTrait
         try {
             return $fn();
         } catch (Throwable $e) {
-            Craft::warning('Simple SEO MCP tool failed: ' . $e->getMessage(), __METHOD__);
+            Craft::warning(sprintf(
+                "Simple SEO MCP tool failed: %s: %s in %s:%d\n%s",
+                $e::class,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+                $e->getTraceAsString(),
+            ), __METHOD__);
 
             return [
                 'error' => 'An internal error occurred while running the tool; see the Craft logs for details.',
