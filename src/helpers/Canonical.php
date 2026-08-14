@@ -37,11 +37,10 @@ final class Canonical
 
         $path = $parts['path'] ?? '';
         if ($path !== '') {
-            $segments = array_map(
+            $path = implode('/', array_map(
                 static fn(string $segment): string => rawurlencode(rawurldecode($segment)),
                 explode('/', $path),
-            );
-            $path = implode('/', $segments);
+            ));
         }
 
         $query = '';

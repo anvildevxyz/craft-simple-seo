@@ -8,6 +8,7 @@ use anvildev\simpleseo\helpers\SeoFieldReader;
 use anvildev\simpleseo\helpers\SiteUrl;
 use anvildev\simpleseo\helpers\TitleFormatter;
 use anvildev\simpleseo\models\ResolvedMeta;
+use anvildev\simpleseo\models\Settings;
 use anvildev\simpleseo\models\SiteDefaults;
 use anvildev\simpleseo\Plugin;
 use Craft;
@@ -137,6 +138,7 @@ class MetaService extends Component
         }
 
         $plugin = Plugin::getInstance();
+        $settings = $plugin->getSettings();
         $site = $this->_site($element);
         $siteName = (string)$site->name;
         $defaults = $plugin->getSiteDefaults()->getForSite((int)$site->id);
@@ -151,11 +153,11 @@ class MetaService extends Component
                 ? ResolvedMeta::SOURCE_OVERRIDE
                 : ResolvedMeta::SOURCE_FIELD;
         } else {
-            $canonical = $this->_elementCanonical($element);
+            $canonical = $this->_elementCanonical($element, $settings);
             $canonicalSource = ResolvedMeta::SOURCE_ELEMENT_URL;
         }
 
-        if ($plugin->getSettings()->siteWideNoindex) {
+        if ($settings->siteWideNoindex) {
             $robots = 'noindex, nofollow';
             $robotsSource = ResolvedMeta::SOURCE_LOCKDOWN;
         } elseif (array_key_exists('robots', $overrides)) {
@@ -218,16 +220,17 @@ class MetaService extends Component
      * appended on paginated front-end requests (ethercreative/seo#335) so
      * page two never claims to canonically be page one.
      */
-    private function _elementCanonical(?ElementInterface $element): ?string
+    private function _elementCanonical(?ElementInterface $element, Settings $settings): ?string
     {
         $url = $element?->getUrl();
         if ($url === null || $url === '') {
             return null;
         }
 
-        $allowed = Plugin::getInstance()->getSettings()->canonicalAllowedQueryParams;
+        $general = Craft::$app->getConfig()->getGeneral();
+        $allowed = $settings->canonicalAllowedQueryParams;
 
-        $pathParam = Craft::$app->getConfig()->getGeneral()->pathParam;
+        $pathParam = $general->pathParam;
         if (is_string($pathParam) && $pathParam !== '') {
             $allowed[] = $pathParam;
         }
@@ -236,7 +239,7 @@ class MetaService extends Component
         if ($request instanceof WebRequest && !$request->getIsConsoleRequest() && !$request->getIsCpRequest()) {
             $pageNum = $request->getPageNum();
             if ($pageNum > 1) {
-                $trigger = Craft::$app->getConfig()->getGeneral()->getPageTrigger();
+                $trigger = $general->getPageTrigger();
                 $url = Canonical::paginated($url, $pageNum, $trigger);
                 if (str_starts_with($trigger, '?')) {
                     $allowed[] = trim($trigger, '?=');

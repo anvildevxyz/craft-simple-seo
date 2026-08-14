@@ -63,9 +63,9 @@ class SitemapController extends Controller
         }
 
         $empty = 0;
+        $sitemap = Plugin::getInstance()->getSitemap();
 
         foreach ($sites as $site) {
-            $sitemap = Plugin::getInstance()->getSitemap();
             $this->stdout("\n" . $site->name . "\n", Console::BOLD);
 
             if (!$sitemap->isEnabledForSite($site)) {
