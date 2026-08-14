@@ -15,7 +15,6 @@ use craft\models\CategoryGroup_SiteSettings;
 use craft\models\EntryType;
 use craft\models\FieldLayout;
 use craft\models\TagGroup;
-use craft\web\View;
 use DateTime;
 use IntegrationTester;
 
@@ -190,20 +189,6 @@ class SeoFieldCest
     // Private Methods
     // =========================================================================
 
-    /**
-     * Renders the field input in CP template mode, restoring the mode after.
-     */
-    private function _renderInputHtml(SeoField $field, Entry $entry): string
-    {
-        $view = Craft::$app->getView();
-        $originalMode = $view->getTemplateMode();
-        $view->setTemplateMode(View::TEMPLATE_MODE_CP);
-        try {
-            return $field->getInputHtml($entry->getFieldValue('seo'), $entry);
-        } finally {
-            $view->setTemplateMode($originalMode);
-        }
-    }
 
     /**
      * Builds a single-tab field layout containing the SEO field.
@@ -247,7 +232,7 @@ class SeoFieldCest
         $field = $fixture['field'];
         $field->enabledSubfields = ['title'];
 
-        $html = $this->_renderInputHtml($field, $entry);
+        $html = $I->renderSeoFieldInput($field, $entry);
 
         // Shown.
         $I->assertStringContainsString('Stored title', $html);
@@ -280,7 +265,7 @@ class SeoFieldCest
         $field = $fixture['field'];
         $field->enabledRobotsDirectives = ['nosnippet'];
 
-        $html = $this->_renderInputHtml($field, $entry);
+        $html = $I->renderSeoFieldInput($field, $entry);
 
         // The offered directive is a real switch.
         $I->assertStringContainsString('No text snippet or video preview (nosnippet)', $html);
@@ -307,10 +292,9 @@ class SeoFieldCest
         $I->assertTrue($field->showsSubfield('title'));
         $I->assertTrue($field->showsSubfield('canonical'));
 
-        $saved = Craft::$app->getPlugins()->savePluginSettings($plugin, [
+        $I->seedPluginSettings([
             'availableSubfields' => ['preview', 'title', 'description'],
         ]);
-        $I->assertTrue($saved, json_encode($plugin->getSettings()->getErrors()) ?: '');
 
         // Still enabled on the field, but no longer offered by the install.
         $I->assertTrue($field->showsSubfield('title'));

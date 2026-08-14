@@ -7,7 +7,6 @@ use anvildev\simpleseo\Plugin;
 use anvildev\simpleseo\records\SiteSettings as SiteSettingsRecord;
 use Craft;
 use craft\elements\User;
-use craft\web\View;
 use IntegrationTester;
 
 /**
@@ -45,7 +44,7 @@ class SiteDefaultsCest
         $site = Craft::$app->getSites()->getPrimarySite();
         $plugin = Plugin::getInstance();
 
-        $saved = Craft::$app->getPlugins()->savePluginSettings($plugin, [
+        $I->seedPluginSettings([
             'siteSettings' => [
                 $site->uid => [
                     'titleFormat' => '{title} | {siteName}',
@@ -53,7 +52,6 @@ class SiteDefaultsCest
                 ],
             ],
         ]);
-        $I->assertTrue($saved, json_encode($plugin->getSettings()->getErrors()) ?: '');
 
         $defaults = $plugin->getSiteDefaults()->getForSite((int)$site->id);
         $I->assertSame('{title} | {siteName}', $defaults->titleFormat);
@@ -226,12 +224,11 @@ class SiteDefaultsCest
         $site = Craft::$app->getSites()->getPrimarySite();
         $plugin = Plugin::getInstance();
 
-        $saved = Craft::$app->getPlugins()->savePluginSettings($plugin, [
+        $I->seedPluginSettings([
             'siteSettings' => [
                 $site->uid => ['titleFormat' => '{title} • {siteName}'],
             ],
         ]);
-        $I->assertTrue($saved, json_encode($plugin->getSettings()->getErrors()) ?: '');
 
         $fixture = $I->createSeoSection('defaultsPages', [
             'name' => 'Defaults Pages',
@@ -240,14 +237,7 @@ class SiteDefaultsCest
         ]);
         $entry = $I->createEntryWithSeo($fixture, 'Defaults Page');
 
-        $view = Craft::$app->getView();
-        $originalMode = $view->getTemplateMode();
-        $view->setTemplateMode(View::TEMPLATE_MODE_CP);
-        try {
-            $html = $fixture['field']->getInputHtml($entry->getFieldValue('seo'), $entry);
-        } finally {
-            $view->setTemplateMode($originalMode);
-        }
+        $html = $I->renderSeoFieldInput($fixture['field'], $entry);
 
         $expected = 'Defaults Page • ' . $site->name;
         $I->assertStringContainsString(

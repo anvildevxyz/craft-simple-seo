@@ -320,7 +320,7 @@ class SeoField extends Field implements PreviewableFieldInterface
      */
     public function shownRobotsDirectives(): array
     {
-        return array_values(array_intersect(SeoData::ROBOTS_DIRECTIVES, $this->enabledRobotsDirectives));
+        return SeoData::canonicalizeDirectives($this->enabledRobotsDirectives);
     }
 
     /**
@@ -530,9 +530,6 @@ class SeoField extends Field implements PreviewableFieldInterface
 
         $posted = array_map('strval', array_filter($raw, static fn(mixed $v): bool => is_scalar($v)));
 
-        return array_values(array_filter(
-            SeoData::ROBOTS_DIRECTIVES,
-            static fn(string $directive): bool => in_array($directive, $posted, true),
-        ));
+        return SeoData::canonicalizeDirectives($posted);
     }
 }

@@ -162,12 +162,7 @@ class RobotsService extends Component
         $plugin = Plugin::getInstance();
         $settings = $plugin->getSettings();
 
-        $body = trim($body);
-        $robotsTxt = $settings->robotsTxt;
-        unset($robotsTxt[$site->uid]);
-        if ($body !== '') {
-            $robotsTxt[$site->uid] = $body;
-        }
+        $robotsTxt = Settings::withSiteSlice($settings->robotsTxt, (string)$site->uid, trim($body));
 
         // Content is kept even when the file is switched off, so turning it
         // back on restores what the author wrote.

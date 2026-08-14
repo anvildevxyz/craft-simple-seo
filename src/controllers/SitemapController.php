@@ -4,6 +4,7 @@ namespace anvildev\simpleseo\controllers;
 
 use anvildev\simpleseo\Permissions;
 use anvildev\simpleseo\Plugin;
+use anvildev\simpleseo\services\SitemapService;
 use Craft;
 use craft\web\Controller;
 use yii\web\NotFoundHttpException;
@@ -51,13 +52,7 @@ class SitemapController extends Controller
         if ($this->request->getQueryParam('explain') !== null && Craft::$app->getUser()->checkPermission(Permissions::ACCESS)) {
             $lines = ['Simple SEO sitemap diagnosis — site: ' . $site->handle, ''];
             foreach ($sitemap->explain($site) as $row) {
-                $lines[] = sprintf(
-                    '%s %-24s %5d URLs  %s',
-                    $row['included'] ? '✓' : '✗',
-                    $row['section'],
-                    $row['urls'],
-                    $row['reason'],
-                );
+                $lines[] = ($row['included'] ? '✓' : '✗') . ' ' . SitemapService::explainLine($row);
             }
 
             return $this->_raw(implode("\n", $lines) . "\n", 'text/plain');

@@ -17,6 +17,7 @@ use craft\models\FieldLayout;
 use craft\models\Section;
 use craft\models\Section_SiteSettings;
 use craft\models\Volume;
+use craft\web\View;
 use DateTime;
 
 /**
@@ -287,5 +288,50 @@ class Integration extends Module
         );
 
         return $asset;
+    }
+
+    /**
+     * Runs a callable in CP template mode, restoring the previous mode even
+     * when it throws — a leaked CP mode would poison every later test.
+     *
+     * @param callable(): mixed $fn
+     */
+    public function inCpTemplateMode(callable $fn): mixed
+    {
+        $view = \Craft::$app->getView();
+        $originalMode = $view->getTemplateMode();
+        $view->setTemplateMode(View::TEMPLATE_MODE_CP);
+        try {
+            return $fn();
+        } finally {
+            $view->setTemplateMode($originalMode);
+        }
+    }
+
+    /**
+     * Renders an SEO field's input HTML for an entry (or without element
+     * context when the entry is null), in CP template mode.
+     */
+    public function renderSeoFieldInput(SeoField $field, ?Entry $entry): string
+    {
+        return (string)$this->inCpTemplateMode(
+            static fn(): string => $field->getInputHtml(
+                $entry !== null ? $entry->getFieldValue($field->handle) : $field->normalizeValue(null),
+                $entry,
+            ),
+        );
+    }
+
+    /**
+     * Saves plugin settings for a test fixture, failing with the settings
+     * model's errors when the save is rejected.
+     *
+     * @param array<string, mixed> $groups
+     */
+    public function seedPluginSettings(array $groups): void
+    {
+        $plugin = Plugin::getInstance();
+        $saved = \Craft::$app->getPlugins()->savePluginSettings($plugin, $groups);
+        $this->assertTrue($saved, json_encode($plugin->getSettings()->getErrors()) ?: '');
     }
 }
