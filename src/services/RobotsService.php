@@ -76,8 +76,7 @@ class RobotsService extends Component
             return "User-agent: *\nDisallow: /\n";
         }
 
-        $custom = $this->customForSite($site);
-        $body = $custom !== null ? $custom : $this->defaultForSite($site);
+        $body = $this->customForSite($site) ?? $this->defaultForSite($site);
 
         return rtrim($this->_expandTokens($body, $site), "\n") . "\n";
     }

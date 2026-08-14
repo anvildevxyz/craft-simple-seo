@@ -161,10 +161,7 @@ class DiagnosticsService extends Component
                 'detail' => 'Switched off — this site serves its own.',
             ]);
         } else {
-            $urls = 0;
-            foreach ($sitemap->explain($site) as $row) {
-                $urls += $row['urls'];
-            }
+            $urls = array_sum(array_column($sitemap->explain($site), 'urls'));
             $sections = count($sitemap->includedSections($site));
 
             // Serving an empty sitemap is the "never silently empty"
