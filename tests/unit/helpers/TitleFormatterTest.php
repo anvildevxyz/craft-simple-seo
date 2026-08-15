@@ -12,6 +12,8 @@ use PHPUnit\Framework\TestCase;
  * mirror (seo-field.js formatSeoTitle) via tests/js/preview-format.test.js,
  * so the two implementations cannot drift apart case-by-case.
  *
+ * @phpstan-type TitleFormatCase array{note: string, title: string|null, fallback: string, siteName: string, format: string|null, expected: string}
+ *
  * @author Anvil Dev
  * @since 1.0.0
  */
@@ -23,12 +25,12 @@ class TitleFormatterTest extends TestCase
     /**
      * Provides the shared PHP/JS test vectors, keyed by their notes.
      *
-     * @return array<string, array{0: array{note: string, title: string|null, fallback: string, siteName: string, format: string|null, expected: string}}>
+     * @return array<string, array{0: TitleFormatCase}>
      */
     public static function titleFormatCases(): array
     {
         $json = (string)file_get_contents(dirname(__DIR__, 2) . '/fixtures/title-format-cases.json');
-        /** @var array<int, array{note: string, title: string|null, fallback: string, siteName: string, format: string|null, expected: string}> $cases */
+        /** @var array<int, TitleFormatCase> $cases */
         $cases = json_decode($json, true, 512, JSON_THROW_ON_ERROR);
 
         $provided = [];
@@ -42,7 +44,7 @@ class TitleFormatterTest extends TestCase
     /**
      * Every shared vector formats identically in PHP.
      *
-     * @param array{note: string, title: string|null, fallback: string, siteName: string, format: string|null, expected: string} $case
+     * @param TitleFormatCase $case
      */
     #[DataProvider('titleFormatCases')]
     public function testSharedVector(array $case): void

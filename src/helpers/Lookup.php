@@ -35,9 +35,9 @@ final class Lookup
         $query = Entry::find()->id($id)->status(null);
 
         if ($siteHandle !== null) {
-            $site = Craft::$app->getSites()->getSiteByHandle($siteHandle);
-            if ($site === null) {
-                return "No site with handle “{$siteHandle}”.";
+            $site = self::site($siteHandle);
+            if (is_string($site)) {
+                return $site;
             }
             $query->siteId($site->id);
         }

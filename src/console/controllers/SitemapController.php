@@ -14,8 +14,8 @@ use yii\console\ExitCode;
 /**
  * Sitemap commands.
  *
- * `explain` is the terminal twin of `/sitemap.xml?explain`, which until now
- * could only be read in a browser by someone who thought to look. The same
+ * `explain` is the terminal twin of `/sitemap.xml?explain`, which only helps
+ * someone who thinks to open it in a browser. The same
  * diagnosis in a pipeline is what turns "never silently empty" from a promise
  * into something a build can enforce.
  *

@@ -9,8 +9,8 @@ use craft\helpers\UrlHelper;
  *
  * The CP preview and the rendered `og:image` have to show the same URL, even
  * when the CP runs on a different domain to the site (ethercreative/seo#395).
- * They used to absolutize separately, with nothing keeping the two in step;
- * this is the one implementation both call.
+ * This is the one implementation both call, so the two cannot fall out of
+ * step.
  *
  * Pure and app-free, so the base URL arrives as a string rather than a Site —
  * that is what makes it unit-testable without booting Craft.

@@ -12,6 +12,8 @@ use craft\base\Model;
  * deliberate configuration worth restating so nobody is surprised by it; OK
  * means checked and healthy. Only PROBLEM affects the exit code.
  *
+ * @phpstan-type FindingPayload array{level: string, site: string|null, check: string, detail: string, fix: string|null}
+ *
  * @author Anvil Dev
  * @since 1.0.0
  */
@@ -66,7 +68,7 @@ class Finding extends Model
      * can never drift.
      *
      * @param self[] $findings
-     * @return array{problems: int, findings: list<array{level: string, site: string|null, check: string, detail: string, fix: string|null}>}
+     * @return array{problems: int, findings: list<FindingPayload>}
      */
     public static function listPayload(array $findings): array
     {
@@ -80,7 +82,7 @@ class Finding extends Model
      * The finding as a stable machine-readable shape for --json output.
      * Key order and names are contract: pipelines parse this.
      *
-     * @return array{level: string, site: string|null, check: string, detail: string, fix: string|null}
+     * @return FindingPayload
      */
     public function toPayload(): array
     {

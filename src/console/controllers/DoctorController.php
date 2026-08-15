@@ -71,7 +71,7 @@ class DoctorController extends Controller
         // character-aware — str_pad() counts bytes, so one "Français" would
         // shift every row after it.
         $maxSite = $maxCheck = 0;
-        foreach ($shown ?: [new Finding()] as $f) {
+        foreach ($shown as $f) {
             $maxSite = max($maxSite, mb_strlen($f->site ?? '—'));
             $maxCheck = max($maxCheck, mb_strlen($f->check));
         }

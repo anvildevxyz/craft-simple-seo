@@ -4,6 +4,7 @@ namespace anvildev\simpleseo\services;
 
 use anvildev\simpleseo\fields\data\SeoData;
 use anvildev\simpleseo\fields\SeoField;
+use anvildev\simpleseo\helpers\Coerce;
 use anvildev\simpleseo\helpers\SeoFieldReader;
 use anvildev\simpleseo\models\EtherMigrationReport;
 use Craft;
@@ -288,19 +289,12 @@ class EtherMigrationService extends Component
                 static fn(string $p): bool => $p !== '',
             );
             $title = $parts !== [] ? implode(' ', $parts) : null;
-        } elseif (is_string($titleRaw) && trim($titleRaw) !== '') {
-            $title = trim($titleRaw);
-        } elseif (isset($old['title']) && is_string($old['title']) && trim($old['title']) !== '') {
-            $title = trim($old['title']);
+        } else {
+            $title = Coerce::stringOrNull($titleRaw) ?? Coerce::stringOrNull($old['title'] ?? null);
         }
 
-        $description = null;
-        foreach (['descriptionRaw', 'description'] as $key) {
-            if (isset($old[$key]) && is_string($old[$key]) && trim($old[$key]) !== '') {
-                $description = trim($old[$key]);
-                break;
-            }
-        }
+        $description = Coerce::stringOrNull($old['descriptionRaw'] ?? null)
+            ?? Coerce::stringOrNull($old['description'] ?? null);
 
         $imageId = null;
         foreach (['twitter', 'facebook'] as $network) {
@@ -319,8 +313,7 @@ class EtherMigrationService extends Component
         $noindex = in_array('noindex', $robots, true) || in_array('none', $robots, true);
         $nofollow = in_array('nofollow', $robots, true) || in_array('none', $robots, true);
 
-        $canonical = $old['advanced']['canonical'] ?? null;
-        $canonical = is_string($canonical) && trim($canonical) !== '' ? trim($canonical) : null;
+        $canonical = Coerce::stringOrNull($old['advanced']['canonical'] ?? null);
 
         if ($title !== null) {
             $report->titles++;
