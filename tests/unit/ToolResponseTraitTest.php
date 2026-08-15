@@ -58,4 +58,34 @@ class ToolResponseTraitTest extends TestCase
             json_encode($response, JSON_THROW_ON_ERROR),
         );
     }
+
+    /**
+     * An anonymous exception class's name embeds the defining file's path
+     * (`RuntimeException@anonymous /path/to/file.php:12$0`), and
+     * ReflectionClass::getShortName() keeps all of it — so the type key must
+     * be truncated, or the control leaks a server path after all.
+     */
+    public function testGuardTruncatesAnonymousClassNames(): void
+    {
+        $consumer = new class {
+            use ToolResponseTrait;
+
+            /**
+             * Runs a body throwing an anonymous exception through guard().
+             *
+             * @return array<string, mixed>
+             */
+            public function run(): array
+            {
+                return $this->guard(static function(): array {
+                    throw new class ('secret detail') extends RuntimeException {};
+                });
+            }
+        };
+
+        $response = $consumer->run();
+
+        $this->assertSame('RuntimeException@anonymous', $response['type']);
+        $this->assertStringNotContainsString(__FILE__, (string)json_encode($response));
+    }
 }

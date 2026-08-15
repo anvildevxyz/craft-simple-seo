@@ -18,8 +18,16 @@ use craft\base\Model;
  */
 class AuditReport extends Model
 {
-    // Public Properties
+    // Const Properties
     // =========================================================================
+
+    /**
+     * @var string The issue label for an entry whose description resolves to
+     * the site default. Declared here rather than beside the rest of the
+     * ISSUE_* family on AuditService because ADVISORY consumes it — a model
+     * referencing a service constant would put this class in a cycle.
+     */
+    public const ISSUE_INHERITED_DESCRIPTION = 'no own description (site default shown)';
 
     /**
      * @var string[] Issues that are reported but never fail the run.
@@ -28,15 +36,13 @@ class AuditReport extends Model
      * this plugin, not a defect. Failing a build for using it as designed
      * would teach everyone to pass --tolerate permanently, which costs the
      * gate its whole value.
-     *
-     * A literal copy of AuditService::ISSUE_INHERITED_DESCRIPTION, not a
-     * reference to it — a model referencing a service would put this class
-     * back in a cycle with AuditService. SeoFieldContractsTest pins the two
-     * in lockstep, so drift fails the build instead of shipping silently.
      */
     public const ADVISORY = [
-        'no own description (site default shown)',
+        self::ISSUE_INHERITED_DESCRIPTION,
     ];
+
+    // Public Properties
+    // =========================================================================
 
     /**
      * @var int Live, URL-having entries examined.

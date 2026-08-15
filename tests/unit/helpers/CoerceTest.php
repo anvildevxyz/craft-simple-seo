@@ -3,6 +3,7 @@
 namespace anvildev\simpleseo\tests\unit\helpers;
 
 use anvildev\simpleseo\helpers\Coerce;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 
 /**
@@ -18,9 +19,7 @@ class CoerceTest extends TestCase
     // Public Methods
     // =========================================================================
 
-    /**
-     * @dataProvider stringOrNullProvider
-     */
+    #[DataProvider('stringOrNullProvider')]
     public function testStringOrNull(mixed $value, ?string $expected): void
     {
         $this->assertSame($expected, Coerce::stringOrNull($value));

@@ -33,7 +33,8 @@ class AuditService extends Component
     // =========================================================================
 
     public const ISSUE_NO_DESCRIPTION = 'no description at all';
-    public const ISSUE_INHERITED_DESCRIPTION = 'no own description (site default shown)';
+    // ISSUE_INHERITED_DESCRIPTION lives on AuditReport: its ADVISORY list
+    // consumes it, and a service constant would put the model in a cycle.
     public const ISSUE_TITLE_LONG = 'title over ' . SeoField::TITLE_LIMIT . ' chars';
     public const ISSUE_DESCRIPTION_LONG = 'description over ' . SeoField::DESCRIPTION_LIMIT . ' chars';
     public const ISSUE_DUPLICATE_TITLE = 'duplicate title';
@@ -108,7 +109,7 @@ class AuditService extends Component
                     $report->add(
                         $id,
                         $uri,
-                        $description === '' ? self::ISSUE_NO_DESCRIPTION : self::ISSUE_INHERITED_DESCRIPTION,
+                        $description === '' ? self::ISSUE_NO_DESCRIPTION : AuditReport::ISSUE_INHERITED_DESCRIPTION,
                     );
                 } else {
                     // Only authored descriptions can meaningfully duplicate.

@@ -289,10 +289,8 @@ class EtherMigrationService extends Component
                 static fn(string $p): bool => $p !== '',
             );
             $title = $parts !== [] ? implode(' ', $parts) : null;
-        } elseif (is_string($titleRaw) && trim($titleRaw) !== '') {
-            $title = trim($titleRaw);
-        } elseif (isset($old['title']) && is_string($old['title']) && trim($old['title']) !== '') {
-            $title = trim($old['title']);
+        } else {
+            $title = Coerce::stringOrNull($titleRaw) ?? Coerce::stringOrNull($old['title'] ?? null);
         }
 
         $description = Coerce::stringOrNull($old['descriptionRaw'] ?? null)

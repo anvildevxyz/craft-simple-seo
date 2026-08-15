@@ -43,7 +43,7 @@ class AuditCest
         $report = $plugin->getAudit()->run($site, 'auditPages');
 
         $I->assertSame(2, $report->examined);
-        $I->assertSame(2, $report->totals[AuditService::ISSUE_INHERITED_DESCRIPTION] ?? 0);
+        $I->assertSame(2, $report->totals[AuditReport::ISSUE_INHERITED_DESCRIPTION] ?? 0);
         $I->assertSame([], $report->failingTotals(), 'inheriting the site default must not fail a run');
 
         foreach (array_keys($report->totals) as $issue) {
@@ -89,7 +89,7 @@ class AuditCest
         $report = $plugin->getAudit()->run($site, 'auditBare');
 
         $I->assertSame(1, $report->totals[AuditService::ISSUE_NO_DESCRIPTION] ?? 0);
-        $I->assertArrayNotHasKey(AuditService::ISSUE_INHERITED_DESCRIPTION, $report->totals);
+        $I->assertArrayNotHasKey(AuditReport::ISSUE_INHERITED_DESCRIPTION, $report->totals);
         $I->assertNotEmpty($report->failingTotals(), 'shipping no description at all must fail');
     }
 
@@ -121,7 +121,7 @@ class AuditCest
         $report = new AuditReport();
         $report->examined = 3;
         $report->add(11, 'about', AuditService::ISSUE_DESCRIPTION_LONG);
-        $report->add(12, 'contact', AuditService::ISSUE_INHERITED_DESCRIPTION);
+        $report->add(12, 'contact', AuditReport::ISSUE_INHERITED_DESCRIPTION);
 
         $payload = $report->toPayload('default', null);
 

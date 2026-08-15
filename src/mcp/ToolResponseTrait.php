@@ -42,9 +42,17 @@ trait ToolResponseTrait
                 $e->getTraceAsString(),
             ), __METHOD__);
 
+            // An anonymous class's short name embeds the defining file's
+            // path — truncate so no server path reaches the client.
+            $type = (new \ReflectionClass($e))->getShortName();
+            $marker = strpos($type, '@anonymous');
+            if ($marker !== false) {
+                $type = substr($type, 0, $marker + strlen('@anonymous'));
+            }
+
             return [
                 'error' => 'An internal error occurred while running the tool; see the Craft logs for details.',
-                'type' => (new \ReflectionClass($e))->getShortName(),
+                'type' => $type,
             ];
         }
     }
