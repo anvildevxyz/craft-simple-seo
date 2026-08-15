@@ -100,13 +100,9 @@ class SettingsController extends Controller
         $this->requirePermission(Permissions::MANAGE_SETTINGS);
         $this->_requireAdminChanges();
 
-        $available = $this->request->getBodyParam('availableSubfields', []);
-        if (!is_array($available)) {
-            $available = [];
-        }
         $available = array_values(array_intersect(
             array_keys(SeoField::SUBFIELDS),
-            array_map('strval', $available),
+            $this->_stringArrayParam('availableSubfields'),
         ));
 
         $plugin = Plugin::getInstance();
@@ -186,17 +182,8 @@ class SettingsController extends Controller
         $plugin = Plugin::getInstance();
         $site = $this->_postedSite();
 
-        $checked = $this->request->getBodyParam('sitemapSections', []);
-        if (!is_array($checked)) {
-            $checked = [];
-        }
-        $checked = array_map('strval', $checked);
-
-        $priorities = $this->request->getBodyParam('sitemapPriorities', []);
-        if (!is_array($priorities)) {
-            $priorities = [];
-        }
-        $priorities = array_map('strval', $priorities);
+        $checked = $this->_stringArrayParam('sitemapSections');
+        $priorities = $this->_stringArrayParam('sitemapPriorities');
         $enabled = (bool)$this->request->getBodyParam('sitemapEnabled', false);
 
         return $this->_saveOutcome(
@@ -239,9 +226,9 @@ class SettingsController extends Controller
      * flash + redirect on success. The two flash strings live here and
      * nowhere else; the variables closure only runs on failure.
      *
-     * @param callable(): array<string, mixed> $variables
+     * @param \Closure(): array<string, mixed> $variables
      */
-    private function _saveOutcome(bool $saved, string $template, callable $variables): Response
+    private function _saveOutcome(bool $saved, string $template, \Closure $variables): Response
     {
         if (!$saved) {
             $this->setFailFlash(Craft::t('simple-seo', 'Couldn’t save settings.'));
@@ -276,6 +263,23 @@ class SettingsController extends Controller
     private function _requestedSite(): Site
     {
         return Cp::requestedSite() ?? Craft::$app->getSites()->getPrimarySite();
+    }
+
+    /**
+     * A posted body param as an array of strings. Non-array posts coerce to
+     * the empty array; keys are preserved for map-shaped params (the sitemap
+     * priorities are keyed by section UID).
+     *
+     * @return array<array-key, string>
+     */
+    private function _stringArrayParam(string $name): array
+    {
+        $value = $this->request->getBodyParam($name, []);
+        if (!is_array($value)) {
+            return [];
+        }
+
+        return array_map('strval', $value);
     }
 
     /**

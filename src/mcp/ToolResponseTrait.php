@@ -33,11 +33,26 @@ trait ToolResponseTrait
         try {
             return $fn();
         } catch (Throwable $e) {
-            Craft::warning('Simple SEO MCP tool failed: ' . $e->getMessage(), __METHOD__);
+            Craft::warning(sprintf(
+                "Simple SEO MCP tool failed: %s: %s in %s:%d\n%s",
+                $e::class,
+                $e->getMessage(),
+                $e->getFile(),
+                $e->getLine(),
+                $e->getTraceAsString(),
+            ), __METHOD__);
+
+            // An anonymous class's short name embeds the defining file's
+            // path — truncate so no server path reaches the client.
+            $type = (new \ReflectionClass($e))->getShortName();
+            $marker = strpos($type, '@anonymous');
+            if ($marker !== false) {
+                $type = substr($type, 0, $marker + strlen('@anonymous'));
+            }
 
             return [
                 'error' => 'An internal error occurred while running the tool; see the Craft logs for details.',
-                'type' => (new \ReflectionClass($e))->getShortName(),
+                'type' => $type,
             ];
         }
     }

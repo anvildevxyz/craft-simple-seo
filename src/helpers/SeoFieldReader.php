@@ -108,6 +108,9 @@ final class SeoFieldReader
      * one tolerant parse both the sitemap hot path and the ether migration
      * rely on — a cross-DB shape fix must land in exactly one place.
      *
+     * @param string|array<array-key, mixed>|null $content The raw content
+     * column value: a JSON string (MySQL), a decoded array (PostgreSQL), or
+     * null.
      * @return array<array-key, mixed>|null
      */
     public static function decodeContentDocument(mixed $content): ?array

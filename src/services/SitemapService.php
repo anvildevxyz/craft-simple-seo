@@ -144,7 +144,7 @@ class SitemapService extends Component
                 ->offset(($page - 1) * $this->urlsPerPage)
                 ->limit($this->urlsPerPage)
                 ->all();
-            /** @var array<int, array{elementId: int|string, siteId: int|string, uri: string, content: mixed, dateUpdated: string|null}> $rows */
+            /** @var array<int, array{elementId: int|string, siteId: int|string, uri: string, content: string|array<array-key, mixed>|null, dateUpdated: string|null}> $rows */
             $total = count($rows);
 
             $included = [];
@@ -155,7 +155,7 @@ class SitemapService extends Component
                 $included[(int)$row['elementId']] = $row;
             }
 
-            $alternates = $this->_alternates(array_keys($included), $section, (int)$site->id);
+            $alternates = $this->_alternates(array_keys($included), $section);
             $priority = $this->priorityFor($site, $section);
 
             $urlEntries = [];
@@ -216,7 +216,7 @@ class SitemapService extends Component
             $candidates = $this->_rowQuery($section, (int)$site->id)
                 ->select(['es.content'])
                 ->all();
-            /** @var array<int, array{content: mixed}> $candidates */
+            /** @var array<int, array{content: string|array<array-key, mixed>|null}> $candidates */
             $total = count($candidates);
             if ($total === 0) {
                 $rows[] = $this->_row($section, true, 0, self::REASON_NO_ENTRIES);
@@ -423,7 +423,7 @@ class SitemapService extends Component
      * @param int[] $ids
      * @return array<int, array<int, SitemapAlternate>>
      */
-    private function _alternates(array $ids, Section $section, int $currentSiteId): array
+    private function _alternates(array $ids, Section $section): array
     {
         if ($ids === []) {
             return [];
@@ -524,9 +524,9 @@ class SitemapService extends Component
     /**
      * Cache wrapper: 24h TTL behind the shared invalidation tag.
      *
-     * @param callable(): string $build
+     * @param \Closure(): string $build
      */
-    private function _cached(string $key, callable $build): string
+    private function _cached(string $key, \Closure $build): string
     {
         /** @var string */
         return Craft::$app->getCache()->getOrSet(
