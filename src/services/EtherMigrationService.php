@@ -7,6 +7,7 @@ use anvildev\simpleseo\fields\SeoField;
 use anvildev\simpleseo\helpers\Coerce;
 use anvildev\simpleseo\helpers\SeoFieldReader;
 use anvildev\simpleseo\models\EtherMigrationReport;
+use anvildev\simpleseo\Plugin;
 use Craft;
 use craft\db\Query;
 use craft\db\Table;
@@ -171,6 +172,18 @@ class EtherMigrationService extends Component
             $report->notes[] = "Dropped $report->droppedKeywords focus-keyword set(s): Simple SEO has no content analysis on purpose (it is the most fragile part of every SEO plugin).";
         }
 
+        if ($report->droppedSocialFields > 0) {
+            $report->notes[] = "Dropped $report->droppedSocialFields per-network social value(s): Simple SEO renders one social title, description, and image for every network.";
+        }
+
+        // Content rows were rewritten with raw SQL, so no element-save event
+        // fired. Without this, cached sitemap files keep listing entries the
+        // migration just marked noindex, and the memoized field-layout UIDs
+        // still describe the pre-migration install.
+        if ($apply) {
+            Plugin::getInstance()->getSitemap()->invalidate();
+        }
+
         return $report;
     }
 
@@ -281,7 +294,6 @@ class EtherMigrationService extends Component
      */
     private function _transformValue(array $old, EtherMigrationReport $report): array
     {
-        $title = null;
         $titleRaw = $old['titleRaw'] ?? null;
         if (is_array($titleRaw)) {
             $parts = array_filter(
@@ -290,37 +302,50 @@ class EtherMigrationService extends Component
             );
             $title = $parts !== [] ? implode(' ', $parts) : null;
         } else {
-            $title = Coerce::stringOrNull($titleRaw) ?? Coerce::stringOrNull($old['title'] ?? null);
+            $title = Coerce::stringOrNull($titleRaw);
         }
+        // Both forms fall back to the flat legacy key. An all-blank titleRaw
+        // is as empty as a blank string, so it must not keep the fallback out.
+        $title ??= Coerce::stringOrNull($old['title'] ?? null);
 
         $description = Coerce::stringOrNull($old['descriptionRaw'] ?? null)
             ?? Coerce::stringOrNull($old['description'] ?? null);
 
+        // Ether stores the asset under `imageId`. It renames a legacy `image`
+        // key to that only when it loads a value, so a stored document holds
+        // either key. Reading one alone drops every social image.
         $imageId = null;
+        $networkImages = [];
         foreach (['twitter', 'facebook'] as $network) {
-            // Ether stores the asset under `imageId` and renames a legacy
-            // `image` key to it whenever it loads a value (its SocialData
-            // constructor), so a stored document carries either key depending
-            // on when the entry was last saved. Both are read here: reading
-            // only one silently drops every social image on migration.
-            $social = $old['social'][$network] ?? [];
-            $image = is_array($social)
-                ? ($social['imageId'] ?? $social['image'] ?? null)
-                : null;
-            // The value is an ID, an {id: N} object, or a list of either —
-            // ether's own reader accepts all three.
-            if (is_array($image)) {
-                $first = $image[0] ?? null;
-                $image = $image['id'] ?? (is_array($first) ? ($first['id'] ?? null) : $first);
+            $social = $old['social'][$network] ?? null;
+            if (!is_array($social)) {
+                continue;
             }
-            if (is_numeric($image) && (int)$image > 0) {
-                $imageId = (int)$image;
-                break;
+            $networkImage = Coerce::assetId($social['imageId'] ?? null)
+                ?? Coerce::assetId($social['image'] ?? null);
+            if ($networkImage !== null) {
+                $networkImages[] = $networkImage;
+                $imageId ??= $networkImage;
             }
+            // Simple SEO renders one social title and description for every
+            // network, so per-network overrides cannot come across.
+            $report->droppedSocialFields += count(array_filter([
+                Coerce::stringOrNull($social['title'] ?? null),
+                Coerce::stringOrNull($social['description'] ?? null),
+            ]));
         }
+        // A second, different image is dropped rather than silently preferred.
+        $report->droppedSocialFields += count(array_unique($networkImages)) > 1 ? 1 : 0;
 
         $robotsRaw = $old['advanced']['robots'] ?? [];
-        $robots = is_array($robotsRaw) ? array_map('strval', array_values($robotsRaw)) : [];
+        // Ether's own UI writes a list, but a hand-edited or older row can
+        // hold the directives as one string. Reading only the list shape
+        // would silently turn a hidden page back into an indexable one.
+        $robots = match (true) {
+            is_array($robotsRaw) => array_map('strval', array_values($robotsRaw)),
+            is_string($robotsRaw) => array_map('trim', explode(',', $robotsRaw)),
+            default => [],
+        };
         $noindex = in_array('noindex', $robots, true) || in_array('none', $robots, true);
         $nofollow = in_array('nofollow', $robots, true) || in_array('none', $robots, true);
 

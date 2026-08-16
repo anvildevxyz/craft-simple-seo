@@ -169,15 +169,10 @@ class SeoField extends Field implements PreviewableFieldInterface
             return new SeoData();
         }
 
-        $imageId = $value['socialImageId'] ?? null;
-        if (is_array($imageId)) {
-            $imageId = $imageId[0] ?? null;
-        }
-
         return new SeoData([
             'title' => Coerce::stringOrNull($value['title'] ?? null),
             'description' => Coerce::stringOrNull($value['description'] ?? null),
-            'socialImageId' => is_numeric($imageId) && (int)$imageId > 0 ? (int)$imageId : null,
+            'socialImageId' => Coerce::assetId($value['socialImageId'] ?? null),
             'noindex' => (bool)($value['noindex'] ?? false),
             'nofollow' => (bool)($value['nofollow'] ?? false),
             'canonical' => Coerce::stringOrNull($value['canonical'] ?? null),

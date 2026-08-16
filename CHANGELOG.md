@@ -1,5 +1,15 @@
 # Release Notes for Simple SEO
 
+## Unreleased
+
+### Fixed
+
+- The ether migration no longer loses social images. Ether stores the asset under `social.<network>.imageId` and renames a legacy `image` key to it only when it loads a value, so the stored document carries either. Reading `image` alone dropped every social image while reporting a clean conversion. **If you already migrated, re-run `craft simple-seo/migrate/ether --apply` after updating: the run is idempotent, and it now picks up the images it skipped.** Found by migrating a real ether/seo 5.0.0 install
+- An all-blank `titleRaw` array now falls back to ether's flat `title` key, the way a blank `titleRaw` string already did
+- Robots directives stored as one string, rather than a list, are read correctly. Reading only the list shape turned a hidden page back into an indexable one
+- Applying the migration now drops the sitemap cache. Content rows are rewritten with direct SQL, so no element-save event fires, and cached sitemap files kept listing entries the migration had just marked noindex
+- Per-network social titles, descriptions, and a second differing image are counted in the report. Simple SEO renders one set for every network, and dropped data is never silent
+
 ## 1.0.1 - 2026-08-16
 
 Correctness fixes found by an adversarial review of the 1.0.0 code. No new features, no schema change — updating is a straight `composer update`.

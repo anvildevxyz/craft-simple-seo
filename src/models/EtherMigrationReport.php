@@ -80,6 +80,13 @@ class EtherMigrationReport extends Model
     public int $droppedKeywords = 0;
 
     /**
+     * @var int Per-network social values dropped: a network's own title or
+     * description, and a second image differing from the one carried over.
+     * Simple SEO renders one set for every network. Reported, never silent.
+     */
+    public int $droppedSocialFields = 0;
+
+    /**
      * @var int Redirect rows found in ether's table.
      */
     public int $redirectsFound = 0;

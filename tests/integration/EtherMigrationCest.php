@@ -45,7 +45,7 @@ class EtherMigrationCest
     {
         $fixture = $this->_etherFixture($I);
         $service = Plugin::getInstance()->getEtherMigration();
-        $csvPath = dirname(__DIR__) . '/_output/ether-redirects-test.csv';
+        $csvPath = $this->_csvPath();
         @unlink($csvPath);
 
         // --- Dry run
@@ -134,9 +134,8 @@ class EtherMigrationCest
 
     /**
      * Every ether value shape maps to the right Simple SEO value. Each entry
-     * carries one shape ether actually wrote across its versions, so a
-     * mapping that silently drops data fails here rather than in production
-     * — the migration's whole promise is that nothing disappears quietly.
+     * carries one shape ether writes. A mapping that drops data fails here,
+     * not in production.
      */
     public function mapsEveryEtherValueShape(IntegrationTester $I): void
     {
@@ -146,6 +145,8 @@ class EtherMigrationCest
             'TitleRawString' => ['titleRaw' => '  Spaced title  '],
             'TitleRawParts' => ['titleRaw' => ['1' => 'Part one', '2' => '', '3' => 'Part two']],
             'TitleFallback' => ['titleRaw' => '   ', 'title' => 'Fallback title'],
+            // The array form must fall back too, not only the string form.
+            'TitleEmptyPartsFallback' => ['titleRaw' => ['1' => '', '2' => '  '], 'title' => 'Array fallback title'],
             // descriptionRaw wins; a blank one falls through to description.
             'DescriptionRawWins' => ['descriptionRaw' => 'Raw description', 'description' => 'Old description'],
             'DescriptionFallback' => ['descriptionRaw' => '  ', 'description' => 'Old description'],
@@ -165,19 +166,22 @@ class EtherMigrationCest
             // `none` is ether's shorthand for noindex AND nofollow. Reading it
             // as neither would quietly re-expose pages meant to be hidden.
             'RobotsNone' => ['advanced' => ['robots' => ['none']]],
+            // A hand-edited or older row can hold the directives as a string.
+            'RobotsString' => ['advanced' => ['robots' => 'noindex, nofollow']],
             'BlankCanonical' => ['advanced' => ['canonical' => '   ']],
         ]);
+        $shapeCount = count($install['entries']);
 
-        $report = Plugin::getInstance()->getEtherMigration()->apply();
+        $report = Plugin::getInstance()->getEtherMigration()->apply($this->_csvPath());
         $I->assertSame([], $report->failures);
-        $I->assertSame(12, $report->converted);
+        $I->assertSame($shapeCount, $report->converted);
 
         // Tallies count what actually mapped, so the console summary cannot
         // claim more (or less) than the values carry.
-        $I->assertSame(3, $report->titles);
+        $I->assertSame(4, $report->titles);
         $I->assertSame(2, $report->descriptions);
         $I->assertSame(5, $report->images);
-        $I->assertSame(1, $report->robots);
+        $I->assertSame(2, $report->robots);
         $I->assertSame(0, $report->canonicals);
 
         Craft::$app->getFields()->refreshFields();
@@ -186,6 +190,7 @@ class EtherMigrationCest
         $I->assertSame('Spaced title', $value('TitleRawString')->title);
         $I->assertSame('Part one Part two', $value('TitleRawParts')->title);
         $I->assertSame('Fallback title', $value('TitleFallback')->title);
+        $I->assertSame('Array fallback title', $value('TitleEmptyPartsFallback')->title);
 
         $I->assertSame('Raw description', $value('DescriptionRawWins')->description);
         $I->assertSame('Old description', $value('DescriptionFallback')->description);
@@ -200,13 +205,16 @@ class EtherMigrationCest
         $I->assertTrue($none->noindex, 'ether `none` means noindex');
         $I->assertTrue($none->nofollow, 'ether `none` means nofollow too');
 
+        $stringRobots = $value('RobotsString');
+        $I->assertTrue($stringRobots->noindex, 'a string robots value still hides the page');
+        $I->assertTrue($stringRobots->nofollow);
+
         $I->assertNull($value('BlankCanonical')->canonical, 'a whitespace-only canonical is no canonical');
     }
 
     /**
-     * Every localized row is converted and counted against its own site. A
-     * multi-site install is where a half-migrated field does the most damage,
-     * and the per-site tally is what tells the operator it finished.
+     * Every localized row is converted and counted against its own site. The
+     * per-site tally is how an operator confirms a multi-site run finished.
      */
     public function perSiteTallyCountsEveryLocalizedRow(IntegrationTester $I): void
     {
@@ -228,24 +236,62 @@ class EtherMigrationCest
             [(int)$primary->id, (int)$altSite->id],
         );
 
-        $report = Plugin::getInstance()->getEtherMigration()->apply();
+        try {
+            $report = Plugin::getInstance()->getEtherMigration()->apply($this->_csvPath());
 
-        $I->assertSame(2, $report->converted, 'one row per site');
-        $I->assertSame(1, $report->perSite[(int)$primary->id] ?? 0);
-        $I->assertSame(1, $report->perSite[(int)$altSite->id] ?? 0);
+            $I->assertSame(2, $report->converted, 'one row per site');
+            $I->assertSame(1, $report->perSite[(int)$primary->id] ?? 0);
+            $I->assertSame(1, $report->perSite[(int)$altSite->id] ?? 0);
 
-        // Both localized values really carry the mapped data.
-        Craft::$app->getFields()->refreshFields();
-        foreach ([$primary->id, $altSite->id] as $siteId) {
-            $entry = Entry::find()
-                ->id($install['entries']['Localized'])
-                ->siteId($siteId)
-                ->status(null)
-                ->one();
-            /** @var SeoData $value */
-            $value = $entry->getFieldValue($install['handle']);
-            $I->assertSame('Localized title', $value->title, "site $siteId");
+            // Both localized values really carry the mapped data.
+            Craft::$app->getFields()->refreshFields();
+            foreach ([$primary->id, $altSite->id] as $siteId) {
+                $entry = Entry::find()
+                    ->id($install['entries']['Localized'])
+                    ->siteId($siteId)
+                    ->status(null)
+                    ->one();
+                /** @var SeoData $value */
+                $value = $entry->getFieldValue($install['handle']);
+                $I->assertSame('Localized title', $value->title, "site $siteId");
+            }
+        } finally {
+            // The Sites service is memoized for the whole suite, so a site
+            // left behind outlives the row the rollback removes and every
+            // later test would iterate a site that no longer exists.
+            $sites->deleteSiteById($altSite->id);
         }
+    }
+
+    /**
+     * Applying the migration drops the sitemap cache. Content rows are
+     * rewritten with direct SQL, so no element-save event fires: without an
+     * explicit invalidation a cached file keeps listing an entry the run has
+     * just marked noindex.
+     */
+    public function applyingDropsTheSitemapCache(IntegrationTester $I): void
+    {
+        $install = $this->_install(
+            $I,
+            'Sitemap',
+            ['Hidden' => ['titleRaw' => 'Hidden page', 'advanced' => ['robots' => ['noindex']]]],
+            null,
+            'ether-sitemap/{slug}',
+        );
+
+        $site = Craft::$app->getSites()->getPrimarySite();
+        $sitemap = Plugin::getInstance()->getSitemap();
+        $sitemap->invalidate();
+
+        // Positive control: ether's own shape carries no `noindex` key, so
+        // the entry is listed and the file is now cached.
+        $before = (string)$sitemap->getSectionXml($site, $install['sectionHandle']);
+        $I->assertStringContainsString('ether-sitemap/hidden', $before, 'listed before the migration');
+
+        Plugin::getInstance()->getEtherMigration()->apply($this->_csvPath());
+
+        $after = (string)$sitemap->getSectionXml($site, $install['sectionHandle']);
+        $I->assertStringNotContainsString('ether-sitemap/hidden', $after, 'the migrated noindex drops it');
     }
 
     /**
@@ -265,14 +311,16 @@ class EtherMigrationCest
         Db::update(Table::FIELDS, ['handle' => 'archived'], ['id' => $install['field']->id]);
         Craft::$app->getFields()->refreshFields();
 
-        $report = Plugin::getInstance()->getEtherMigration()->apply();
+        $service = Plugin::getInstance()->getEtherMigration();
+        $report = $service->apply($this->_csvPath());
 
         $I->assertCount(1, $report->failures);
-        $I->assertStringContainsString('archived', $report->failures[0]);
+        // The reserved-word rejection itself, not the handle echoed back —
+        // any other failure would also mention the handle.
+        $I->assertStringContainsString('reserved', strtolower($report->failures[0]));
         $I->assertSame(0, $report->converted, 'content is left alone when its field did not convert');
 
-        // Still ether's type, and the value still carries ether's markers, so
-        // a re-run after the fix finds exactly the same work to do.
+        // Still ether's type, and the value still carries ether's markers.
         $I->assertSame(
             EtherMigrationService::ETHER_FIELD_TYPE,
             (new Query())->select('type')->from(Table::FIELDS)->where(['id' => $install['field']->id])->scalar(),
@@ -280,6 +328,18 @@ class EtherMigrationCest
         $stored = $this->_storedValue($install, 'Broken');
         $I->assertArrayHasKey('titleRaw', $stored, 'value stays ether-shaped');
         $I->assertArrayNotHasKey('socialImageId', $stored);
+
+        // The recovery path is the point: fix the cause, re-run, and the same
+        // work is found and finished.
+        Db::update(Table::FIELDS, ['handle' => $install['handle']], ['id' => $install['field']->id]);
+        Craft::$app->getFields()->refreshFields();
+
+        $rerun = $service->apply($this->_csvPath());
+        $I->assertSame([], $rerun->failures);
+        $I->assertSame(1, $rerun->converted);
+
+        Craft::$app->getFields()->refreshFields();
+        $I->assertSame('Never converted', $this->_value($install, 'Broken')->title);
     }
 
     // Private Methods
@@ -373,10 +433,16 @@ class EtherMigrationCest
      *
      * @param array<string, array<string, mixed>> $shapes Entry title => the ether-shaped stored value
      * @param int[]|null $siteIds Sites to enable the section on; defaults to the primary site
-     * @return array{field: SeoField, handle: string, entries: array<string, int>, layoutElementUid: string}
+     * @param string|null $uriFormat Give the section URLs, so its entries reach the sitemap
+     * @return array{field: SeoField, handle: string, sectionHandle: string, entries: array<string, int>, layoutElementUid: string}
      */
-    private function _install(IntegrationTester $I, string $suffix, array $shapes, ?array $siteIds = null): array
-    {
+    private function _install(
+        IntegrationTester $I,
+        string $suffix,
+        array $shapes,
+        ?array $siteIds = null,
+        ?string $uriFormat = null,
+    ): array {
         $handle = 'etherSeo' . $suffix;
 
         $field = new SeoField();
@@ -416,7 +482,9 @@ class EtherMigrationCest
             static fn(int $siteId): Section_SiteSettings => new Section_SiteSettings([
                 'siteId' => $siteId,
                 'enabledByDefault' => true,
-                'hasUrls' => false,
+                'hasUrls' => $uriFormat !== null,
+                'uriFormat' => $uriFormat,
+                'template' => $uriFormat !== null ? '_page' : null,
             ]),
             $siteIds,
         ));
@@ -441,7 +509,7 @@ class EtherMigrationCest
         $layoutElementUid = null;
         $firstRow = (new Query())->select(['content'])->from(Table::ELEMENTS_SITES)
             ->where(['elementId' => reset($entries)])->one();
-        foreach ((array)Json::decodeIfJson($firstRow['content']) as $key => $val) {
+        foreach (SeoFieldReader::decodeContentDocument($firstRow['content']) ?? [] as $key => $val) {
             $val = Json::decodeIfJson($val);
             if (is_array($val) && ($val['title'] ?? null) === 'placeholder') {
                 $layoutElementUid = (string)$key;
@@ -456,7 +524,7 @@ class EtherMigrationCest
             $rows = (new Query())->select(['id', 'content'])->from(Table::ELEMENTS_SITES)
                 ->where(['elementId' => $entries[$title]])->all();
             foreach ($rows as $row) {
-                $content = Json::decodeIfJson($row['content']) ?: [];
+                $content = SeoFieldReader::decodeContentDocument($row['content']) ?? [];
                 $content[$layoutElementUid] = $shape;
                 // Pass the ARRAY — a pre-encoded string double-encodes on JSON columns.
                 Db::update(Table::ELEMENTS_SITES, ['content' => $content], ['id' => $row['id']]);
@@ -470,9 +538,19 @@ class EtherMigrationCest
         return [
             'field' => $field,
             'handle' => $handle,
+            'sectionHandle' => (string)$section->handle,
             'entries' => $entries,
             'layoutElementUid' => (string)$layoutElementUid,
         ];
+    }
+
+    /**
+     * A CSV path under the test output directory. Every apply() gets one, so
+     * a run never writes into the test install's storage directory.
+     */
+    private function _csvPath(): string
+    {
+        return dirname(__DIR__) . '/_output/ether-redirects-test.csv';
     }
 
     /**
