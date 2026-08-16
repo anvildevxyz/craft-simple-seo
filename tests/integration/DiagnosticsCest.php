@@ -2,12 +2,14 @@
 
 namespace anvildev\simpleseo\tests\integration;
 
+use anvildev\simpleseo\console\controllers\DoctorController;
 use anvildev\simpleseo\fields\SeoField;
 use anvildev\simpleseo\models\Finding;
 use anvildev\simpleseo\Plugin;
 use Craft;
 use craft\db\Table;
 use craft\helpers\Db;
+use craft\helpers\Json;
 use IntegrationTester;
 
 /**
@@ -36,6 +38,53 @@ class DiagnosticsCest
         $problems = $this->_problems($I);
 
         $I->assertSame([], $problems, 'unexpected problems: ' . json_encode($problems));
+    }
+
+    /**
+     * `doctor --json --quiet` serializes problems only — the JSON branch must
+     * not skip the quiet filter (#9). The problems count and exit code still
+     * come from the full set.
+     */
+    public function quietJsonReportsProblemsOnly(IntegrationTester $I): void
+    {
+        $fixture = $I->createSeoSection('doctorPages', ['uriFormat' => 'doctor/{slug}', 'template' => '_page']);
+        $I->createEntryWithSeo($fixture, 'Doctor One', []);
+
+        $run = static function(bool $quiet): array {
+            $controller = new class ('doctor', Craft::$app) extends DoctorController {
+                /**
+                 * @var string Everything the action wrote to stdout.
+                 */
+                public string $captured = '';
+
+                /**
+                 * @inheritdoc
+                 */
+                public function stdout($string)
+                {
+                    $this->captured .= $string;
+
+                    return strlen($string);
+                }
+            };
+            $controller->json = true;
+            $controller->quiet = $quiet;
+            $exitCode = $controller->actionIndex();
+
+            return [Json::decode($controller->captured), $exitCode];
+        };
+
+        // Healthy install: without --quiet the payload lists every OK/note row.
+        [$full, $exitCode] = $run(false);
+        $I->assertSame(0, $exitCode);
+        $I->assertSame(0, $full['problems']);
+        $I->assertNotEmpty($full['findings'], 'positive control: unfiltered JSON carries the healthy rows');
+
+        // With --quiet only problems remain — none here, so the list is empty.
+        [$quiet, $exitCode] = $run(true);
+        $I->assertSame(0, $exitCode);
+        $I->assertSame(0, $quiet['problems']);
+        $I->assertSame([], $quiet['findings'], '--quiet must filter the JSON output too');
     }
 
     /**
