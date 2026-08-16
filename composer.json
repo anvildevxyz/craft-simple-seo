@@ -1,7 +1,7 @@
 {
   "name": "anvildev/craft-simple-seo",
   "description": "Simple SEO fields for Craft CMS — meta title & description, social image, canonical, robots, and an XML sitemap",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "craft-plugin",
   "license": "proprietary",
   "keywords": ["craft", "cms", "craftcms", "seo", "sitemap", "meta"],
