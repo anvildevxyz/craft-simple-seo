@@ -30,9 +30,9 @@ Every value is overridable per call. **Unknown keys throw** with the allowed lis
 
 | Key | Overrides | Notes |
 |---|---|---|
-| `title` | `<title>` **and** the social title | Bypasses the title format entirely |
-| `description` | All description tags | |
-| `canonical` | Canonical tag + header + `og:url` | Treated like an author canonical: params kept, encoding normalized |
+| `title` | `<title>` **and** the social title | Bypasses the title format entirely. `null` is treated as absent — a page always has a title, so the fallback chain runs |
+| `description` | All description tags | Explicit `null` suppresses the tags |
+| `canonical` | Canonical tag + header + `og:url` | Treated like an author canonical: params kept, encoding normalized. Explicit `null` suppresses tag, header, and `og:url` |
 | `robots` | The robots meta | Explicit `null` suppresses the tag. The [staging lockdown](robots.md) still wins — a lockdown that can be overridden isn't one |
 | `ogType` | `og:type` | Default `website`; set `article` on post templates |
 | `ogSiteName` | `og:site_name` | Default: the site name |

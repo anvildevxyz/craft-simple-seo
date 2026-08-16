@@ -95,6 +95,43 @@ class MetaRenderCest
     }
 
     /**
+     * An explicit null override CLEARS its value — description, canonical,
+     * and robots render no tag even when the field carries one — while a
+     * null title is treated as absent and the chain still runs: a page
+     * always has a title (#6).
+     */
+    public function explicitNullOverridesClear(IntegrationTester $I): void
+    {
+        $entry = $this->_entry($I, [
+            'title' => 'Null override page',
+            'description' => 'Field description.',
+            'canonical' => 'https://example.com/elsewhere',
+            'noindex' => true,
+        ]);
+        $meta = Plugin::getInstance()->getMeta();
+
+        $html = (string)$meta->renderTags($entry, [
+            'description' => null,
+            'canonical' => null,
+            'robots' => null,
+        ]);
+        $I->assertStringNotContainsString('name="description"', $html);
+        $I->assertStringNotContainsString('rel="canonical"', $html);
+        $I->assertStringNotContainsString('og:url', $html);
+        $I->assertStringNotContainsString('name="robots"', $html);
+
+        $resolved = $meta->resolve($entry, ['description' => null, 'canonical' => null]);
+        $I->assertNull($resolved->description);
+        $I->assertNull($resolved->canonical);
+        $I->assertSame(ResolvedMeta::SOURCE_NONE, $resolved->sources['description']);
+        $I->assertSame(ResolvedMeta::SOURCE_NONE, $resolved->sources['canonical']);
+
+        // A null title falls through: the field's meta title still wins.
+        $titled = $meta->resolve($entry, ['title' => null]);
+        $I->assertStringContainsString('Null override page', $titled->title);
+    }
+
+    /**
      * The fallback chain: no field value → entry title + site default
      * description; no robots tag by default (absent = index,follow — this
      * plugin never emits noindex unless asked).
