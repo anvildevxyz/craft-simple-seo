@@ -298,9 +298,20 @@ class EtherMigrationService extends Component
 
         $imageId = null;
         foreach (['twitter', 'facebook'] as $network) {
-            $image = $old['social'][$network]['image'] ?? null;
+            // Ether stores the asset under `imageId` and renames a legacy
+            // `image` key to it whenever it loads a value (its SocialData
+            // constructor), so a stored document carries either key depending
+            // on when the entry was last saved. Both are read here: reading
+            // only one silently drops every social image on migration.
+            $social = $old['social'][$network] ?? [];
+            $image = is_array($social)
+                ? ($social['imageId'] ?? $social['image'] ?? null)
+                : null;
+            // The value is an ID, an {id: N} object, or a list of either —
+            // ether's own reader accepts all three.
             if (is_array($image)) {
-                $image = $image['id'] ?? ($image[0] ?? null);
+                $first = $image[0] ?? null;
+                $image = $image['id'] ?? (is_array($first) ? ($first['id'] ?? null) : $first);
             }
             if (is_numeric($image) && (int)$image > 0) {
                 $imageId = (int)$image;

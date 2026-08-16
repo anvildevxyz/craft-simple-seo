@@ -149,8 +149,13 @@ class EtherMigrationCest
             // descriptionRaw wins; a blank one falls through to description.
             'DescriptionRawWins' => ['descriptionRaw' => 'Raw description', 'description' => 'Old description'],
             'DescriptionFallback' => ['descriptionRaw' => '  ', 'description' => 'Old description'],
-            // The social image lives under twitter or facebook, and its value
-            // is an ID, an {id: N} object, or a single-element list.
+            // The social image lives under twitter or facebook. Ether stores
+            // it as `imageId` and renames a legacy `image` key to that
+            // whenever it loads a value, so both keys occur in the wild —
+            // `imageId` is what a current ether install actually writes
+            // (verified against ether/seo 5.0.0 on a live install).
+            'ImageIdKey' => ['social' => ['twitter' => ['imageId' => '55']]],
+            'ImageAsAssetList' => ['social' => ['twitter' => ['imageId' => [['id' => 66]]]]],
             'FacebookImage' => ['social' => [
                 'twitter' => ['image' => null],
                 'facebook' => ['image' => 77],
@@ -165,13 +170,13 @@ class EtherMigrationCest
 
         $report = Plugin::getInstance()->getEtherMigration()->apply();
         $I->assertSame([], $report->failures);
-        $I->assertSame(10, $report->converted);
+        $I->assertSame(12, $report->converted);
 
         // Tallies count what actually mapped, so the console summary cannot
         // claim more (or less) than the values carry.
         $I->assertSame(3, $report->titles);
         $I->assertSame(2, $report->descriptions);
-        $I->assertSame(3, $report->images);
+        $I->assertSame(5, $report->images);
         $I->assertSame(1, $report->robots);
         $I->assertSame(0, $report->canonicals);
 
@@ -185,6 +190,8 @@ class EtherMigrationCest
         $I->assertSame('Raw description', $value('DescriptionRawWins')->description);
         $I->assertSame('Old description', $value('DescriptionFallback')->description);
 
+        $I->assertSame(55, $value('ImageIdKey')->socialImageId, 'ether 5.x writes imageId');
+        $I->assertSame(66, $value('ImageAsAssetList')->socialImageId);
         $I->assertSame(77, $value('FacebookImage')->socialImageId);
         $I->assertSame(88, $value('ImageAsIdObject')->socialImageId);
         $I->assertSame(99, $value('ImageAsList')->socialImageId);
