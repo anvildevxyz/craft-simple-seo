@@ -4,6 +4,7 @@ namespace anvildev\simpleseo\tests\integration;
 
 use anvildev\simpleseo\fields\data\SeoData;
 use anvildev\simpleseo\fields\SeoField;
+use anvildev\simpleseo\helpers\SeoFieldReader;
 use anvildev\simpleseo\Plugin;
 use anvildev\simpleseo\services\EtherMigrationService;
 use Craft;
@@ -18,6 +19,7 @@ use craft\models\EntryType;
 use craft\models\FieldLayout;
 use craft\models\Section;
 use craft\models\Section_SiteSettings;
+use craft\models\Site;
 use DateTime;
 use IntegrationTester;
 
@@ -130,6 +132,149 @@ class EtherMigrationCest
         $I->assertSame(0, $again->etherValues);
     }
 
+    /**
+     * Every ether value shape maps to the right Simple SEO value. Each entry
+     * carries one shape ether actually wrote across its versions, so a
+     * mapping that silently drops data fails here rather than in production
+     * — the migration's whole promise is that nothing disappears quietly.
+     */
+    public function mapsEveryEtherValueShape(IntegrationTester $I): void
+    {
+        $install = $this->_install($I, 'Matrix', [
+            // titleRaw arrives as a string, an array of parts, or not at all
+            // (ether's oldest rows carry a plain `title`).
+            'TitleRawString' => ['titleRaw' => '  Spaced title  '],
+            'TitleRawParts' => ['titleRaw' => ['1' => 'Part one', '2' => '', '3' => 'Part two']],
+            'TitleFallback' => ['titleRaw' => '   ', 'title' => 'Fallback title'],
+            // descriptionRaw wins; a blank one falls through to description.
+            'DescriptionRawWins' => ['descriptionRaw' => 'Raw description', 'description' => 'Old description'],
+            'DescriptionFallback' => ['descriptionRaw' => '  ', 'description' => 'Old description'],
+            // The social image lives under twitter or facebook, and its value
+            // is an ID, an {id: N} object, or a single-element list.
+            'FacebookImage' => ['social' => [
+                'twitter' => ['image' => null],
+                'facebook' => ['image' => 77],
+            ]],
+            'ImageAsIdObject' => ['social' => ['twitter' => ['image' => ['id' => 88]]]],
+            'ImageAsList' => ['social' => ['twitter' => ['image' => [99]]]],
+            // `none` is ether's shorthand for noindex AND nofollow. Reading it
+            // as neither would quietly re-expose pages meant to be hidden.
+            'RobotsNone' => ['advanced' => ['robots' => ['none']]],
+            'BlankCanonical' => ['advanced' => ['canonical' => '   ']],
+        ]);
+
+        $report = Plugin::getInstance()->getEtherMigration()->apply();
+        $I->assertSame([], $report->failures);
+        $I->assertSame(10, $report->converted);
+
+        // Tallies count what actually mapped, so the console summary cannot
+        // claim more (or less) than the values carry.
+        $I->assertSame(3, $report->titles);
+        $I->assertSame(2, $report->descriptions);
+        $I->assertSame(3, $report->images);
+        $I->assertSame(1, $report->robots);
+        $I->assertSame(0, $report->canonicals);
+
+        Craft::$app->getFields()->refreshFields();
+        $value = fn(string $key): SeoData => $this->_value($install, $key);
+
+        $I->assertSame('Spaced title', $value('TitleRawString')->title);
+        $I->assertSame('Part one Part two', $value('TitleRawParts')->title);
+        $I->assertSame('Fallback title', $value('TitleFallback')->title);
+
+        $I->assertSame('Raw description', $value('DescriptionRawWins')->description);
+        $I->assertSame('Old description', $value('DescriptionFallback')->description);
+
+        $I->assertSame(77, $value('FacebookImage')->socialImageId);
+        $I->assertSame(88, $value('ImageAsIdObject')->socialImageId);
+        $I->assertSame(99, $value('ImageAsList')->socialImageId);
+
+        $none = $value('RobotsNone');
+        $I->assertTrue($none->noindex, 'ether `none` means noindex');
+        $I->assertTrue($none->nofollow, 'ether `none` means nofollow too');
+
+        $I->assertNull($value('BlankCanonical')->canonical, 'a whitespace-only canonical is no canonical');
+    }
+
+    /**
+     * Every localized row is converted and counted against its own site. A
+     * multi-site install is where a half-migrated field does the most damage,
+     * and the per-site tally is what tells the operator it finished.
+     */
+    public function perSiteTallyCountsEveryLocalizedRow(IntegrationTester $I): void
+    {
+        $sites = Craft::$app->getSites();
+        $primary = $sites->getPrimarySite();
+        $altSite = new Site([
+            'groupId' => $primary->getGroup()->id,
+            'name' => 'Ether Alt',
+            'handle' => 'etherAlt',
+            'language' => 'de',
+            'baseUrl' => 'https://alt.example.test/',
+        ]);
+        $I->assertTrue($sites->saveSite($altSite), 'save alt site: ' . json_encode($altSite->getErrors()));
+
+        $install = $this->_install(
+            $I,
+            'Localized',
+            ['Localized' => ['titleRaw' => 'Localized title', 'descriptionRaw' => 'Localized description']],
+            [(int)$primary->id, (int)$altSite->id],
+        );
+
+        $report = Plugin::getInstance()->getEtherMigration()->apply();
+
+        $I->assertSame(2, $report->converted, 'one row per site');
+        $I->assertSame(1, $report->perSite[(int)$primary->id] ?? 0);
+        $I->assertSame(1, $report->perSite[(int)$altSite->id] ?? 0);
+
+        // Both localized values really carry the mapped data.
+        Craft::$app->getFields()->refreshFields();
+        foreach ([$primary->id, $altSite->id] as $siteId) {
+            $entry = Entry::find()
+                ->id($install['entries']['Localized'])
+                ->siteId($siteId)
+                ->status(null)
+                ->one();
+            /** @var SeoData $value */
+            $value = $entry->getFieldValue($install['handle']);
+            $I->assertSame('Localized title', $value->title, "site $siteId");
+        }
+    }
+
+    /**
+     * A field that fails to convert is reported as a failure and leaves its
+     * values ether-shaped — the documented recovery path. Converting the
+     * content anyway would strand Simple-SEO-shaped values under a field
+     * ether still serializes, which a re-run could no longer recognise.
+     */
+    public function failedFieldConversionLeavesValuesReRunnable(IntegrationTester $I): void
+    {
+        $install = $this->_install($I, 'Broken', [
+            'Broken' => ['titleRaw' => 'Never converted', 'advanced' => ['canonical' => 'https://example.com/x']],
+        ]);
+
+        // `archived` is a reserved field handle, so saveField() rejects the
+        // converted field — the realistic stand-in for any validation failure.
+        Db::update(Table::FIELDS, ['handle' => 'archived'], ['id' => $install['field']->id]);
+        Craft::$app->getFields()->refreshFields();
+
+        $report = Plugin::getInstance()->getEtherMigration()->apply();
+
+        $I->assertCount(1, $report->failures);
+        $I->assertStringContainsString('archived', $report->failures[0]);
+        $I->assertSame(0, $report->converted, 'content is left alone when its field did not convert');
+
+        // Still ether's type, and the value still carries ether's markers, so
+        // a re-run after the fix finds exactly the same work to do.
+        $I->assertSame(
+            EtherMigrationService::ETHER_FIELD_TYPE,
+            (new Query())->select('type')->from(Table::FIELDS)->where(['id' => $install['field']->id])->scalar(),
+        );
+        $stored = $this->_storedValue($install, 'Broken');
+        $I->assertArrayHasKey('titleRaw', $stored, 'value stays ether-shaped');
+        $I->assertArrayNotHasKey('socialImageId', $stored);
+    }
+
     // Private Methods
     // =========================================================================
 
@@ -143,133 +288,45 @@ class EtherMigrationCest
      */
     private function _etherFixture(IntegrationTester $I): array
     {
-        // Real field + layout + entries first (created as OUR type so Craft
-        // APIs work), then flip the stored DB state to look pre-migration.
-        $field = new SeoField();
-        $field->name = 'Ether SEO';
-        $field->handle = 'etherSeo';
-        // Non-default field settings, so the in-place conversion is forced to
-        // carry them: a translatable ether field coming out non-translatable
-        // would propagate one site's SEO over every other on the next save.
-        $field->translationMethod = SeoField::TRANSLATION_METHOD_SITE;
-        $field->searchable = true;
-        $field->instructions = 'Ether instructions that must survive.';
-        $I->assertTrue(Craft::$app->getFields()->saveField($field), json_encode($field->getErrors()));
-
-        $entryType = new EntryType();
-        $entryType->name = 'Ether Page';
-        $entryType->handle = 'etherPage';
-        $layout = new FieldLayout();
-        $layout->type = Entry::class;
-        $layout->setTabs([
-            [
-                'name' => 'Content',
-                'elements' => [
-                    ['type' => EntryTitleField::class],
-                    ['type' => CustomField::class, 'fieldUid' => $field->uid],
+        $install = $this->_install($I, '', [
+            // (1) ether's rich v3+ shape
+            'Rich' => [
+                'titleRaw' => ['1' => 'Migrated title', '2' => ''],
+                'descriptionRaw' => 'Migrated description',
+                'keywords' => [
+                    ['keyword' => 'a', 'rating' => 0],
+                    ['keyword' => 'b', 'rating' => 1],
+                    ['keyword' => 'c', 'rating' => 2],
+                ],
+                'score' => 'unranked',
+                'social' => [
+                    'twitter' => ['title' => '', 'image' => 4242, 'description' => ''],
+                    'facebook' => ['title' => '', 'image' => null, 'description' => ''],
+                ],
+                'advanced' => [
+                    'robots' => ['noindex', 'nofollow'],
+                    'canonical' => 'https://example.com/legacy',
                 ],
             ],
-        ]);
-        $entryType->setFieldLayout($layout);
-        $I->assertTrue(Craft::$app->getEntries()->saveEntryType($entryType), json_encode($entryType->getErrors()));
-
-        $site = Craft::$app->getSites()->getPrimarySite();
-        $section = new Section();
-        $section->name = 'Ether Pages';
-        $section->handle = 'etherPages';
-        $section->type = Section::TYPE_CHANNEL;
-        $section->setSiteSettings([
-            new Section_SiteSettings([
-                'siteId' => $site->id,
-                'enabledByDefault' => true,
-                'hasUrls' => false,
-            ]),
-        ]);
-        $section->setEntryTypes([$entryType]);
-        $I->assertTrue(Craft::$app->getEntries()->saveSection($section), json_encode($section->getErrors()));
-
-        $makeEntry = function(string $title) use ($section, $entryType, $I): Entry {
-            $entry = new Entry();
-            $entry->sectionId = $section->id;
-            $entry->typeId = $entryType->id;
-            $entry->title = $title;
-            $entry->postDate = new DateTime('-1 hour');
-            $entry->setFieldValue('etherSeo', ['title' => 'placeholder']);
-            $I->assertTrue(Craft::$app->getElements()->saveElement($entry), json_encode($entry->getErrors()));
-
-            return $entry;
-        };
-
-        $rich = $makeEntry('Rich');
-        $plain = $makeEntry('Plain');
-        $ours = $makeEntry('Ours');
-
-        // The content key = the field's layout element UID — read it from the
-        // PERSISTED row (the in-memory layout object's uid can diverge from
-        // what the save actually wrote).
-        $layoutElementUid = null;
-        $richRow = (new Query())->select(['content'])->from(Table::ELEMENTS_SITES)
-            ->where(['elementId' => $rich->id])->one();
-        foreach ((array)Json::decodeIfJson($richRow['content']) as $key => $val) {
-            $val = Json::decodeIfJson($val);
-            if (is_array($val) && ($val['title'] ?? null) === 'placeholder') {
-                $layoutElementUid = (string)$key;
-                break;
-            }
-        }
-        $I->assertNotNull($layoutElementUid, 'find the layout element uid in the stored content row');
-
-        $write = static function(int $elementId, array $value) use ($layoutElementUid): void {
-            $row = (new Query())->select(['id', 'content'])->from(Table::ELEMENTS_SITES)
-                ->where(['elementId' => $elementId])->one();
-            $content = Json::decodeIfJson($row['content']) ?: [];
-            $content[$layoutElementUid] = $value;
-            // Pass the ARRAY — a pre-encoded string double-encodes on JSON columns.
-            Db::update(Table::ELEMENTS_SITES, ['content' => $content], ['id' => $row['id']]);
-        };
-
-        // (1) ether's rich v3+ shape
-        $write((int)$rich->id, [
-            'titleRaw' => ['1' => 'Migrated title', '2' => ''],
-            'descriptionRaw' => 'Migrated description',
-            'keywords' => [
-                ['keyword' => 'a', 'rating' => 0],
-                ['keyword' => 'b', 'rating' => 1],
-                ['keyword' => 'c', 'rating' => 2],
+            // (2) ether's oldest plain shape
+            'Plain' => [
+                'title' => 'Old shape title',
+                'description' => '',
             ],
-            'score' => 'unranked',
-            'social' => [
-                'twitter' => ['title' => '', 'image' => 4242, 'description' => ''],
-                'facebook' => ['title' => '', 'image' => null, 'description' => ''],
-            ],
-            'advanced' => [
-                'robots' => ['noindex', 'nofollow'],
-                'canonical' => 'https://example.com/legacy',
+            // (3) already migrated (previous run) — must be skipped untouched
+            'Ours' => [
+                'title' => 'Already ours',
+                'description' => null,
+                'socialImageId' => null,
+                'noindex' => false,
+                'nofollow' => false,
+                'canonical' => null,
             ],
         ]);
-
-        // (2) ether's oldest plain shape
-        $write((int)$plain->id, [
-            'title' => 'Old shape title',
-            'description' => '',
-        ]);
-
-        // (3) already migrated (previous run) — must be skipped untouched
-        $write((int)$ours->id, [
-            'title' => 'Already ours',
-            'description' => null,
-            'socialImageId' => null,
-            'noindex' => false,
-            'nofollow' => false,
-            'canonical' => null,
-        ]);
-
-        // Flip the stored field type to ether's class: pre-migration state.
-        Db::update(Table::FIELDS, ['type' => EtherMigrationService::ETHER_FIELD_TYPE], ['id' => $field->id]);
-        Craft::$app->getFields()->refreshFields();
 
         // Ether's redirects table (DDL survives the test transaction, so
         // guard creation and clear rows for repeatability).
+        $site = Craft::$app->getSites()->getPrimarySite();
         $db = Craft::$app->getDb();
         if (!$db->tableExists(EtherMigrationService::ETHER_REDIRECTS_TABLE)) {
             $db->createCommand()->createTable(EtherMigrationService::ETHER_REDIRECTS_TABLE, [
@@ -291,9 +348,153 @@ class EtherMigrationCest
         )->execute();
 
         return [
-            'richEntryId' => (int)$rich->id,
-            'plainEntryId' => (int)$plain->id,
-            'oursEntryId' => (int)$ours->id,
+            'richEntryId' => $install['entries']['Rich'],
+            'plainEntryId' => $install['entries']['Plain'],
+            'oursEntryId' => $install['entries']['Ours'],
         ];
+    }
+
+    /**
+     * Builds pre-migration DB state: a real field, entry type, section, and
+     * one entry per supplied shape, with the shape written verbatim into
+     * every one of that entry's elements_sites rows — then the field's stored
+     * type flipped to ether's class, which is exactly what the migrator finds
+     * on a real pre-migration install.
+     *
+     * Entries are created while the field is still OUR type so Craft's own
+     * APIs work; the flip happens last.
+     *
+     * @param array<string, array<string, mixed>> $shapes Entry title => the ether-shaped stored value
+     * @param int[]|null $siteIds Sites to enable the section on; defaults to the primary site
+     * @return array{field: SeoField, handle: string, entries: array<string, int>, layoutElementUid: string}
+     */
+    private function _install(IntegrationTester $I, string $suffix, array $shapes, ?array $siteIds = null): array
+    {
+        $handle = 'etherSeo' . $suffix;
+
+        $field = new SeoField();
+        $field->name = 'Ether SEO ' . ($suffix !== '' ? $suffix : 'Base');
+        $field->handle = $handle;
+        // Non-default field settings, so the in-place conversion is forced to
+        // carry them: a translatable ether field coming out non-translatable
+        // would propagate one site's SEO over every other on the next save.
+        $field->translationMethod = SeoField::TRANSLATION_METHOD_SITE;
+        $field->searchable = true;
+        $field->instructions = 'Ether instructions that must survive.';
+        $I->assertTrue(Craft::$app->getFields()->saveField($field), json_encode($field->getErrors()));
+
+        $entryType = new EntryType();
+        $entryType->name = 'Ether Page ' . ($suffix !== '' ? $suffix : 'Base');
+        $entryType->handle = 'etherPage' . $suffix;
+        $layout = new FieldLayout();
+        $layout->type = Entry::class;
+        $layout->setTabs([
+            [
+                'name' => 'Content',
+                'elements' => [
+                    ['type' => EntryTitleField::class],
+                    ['type' => CustomField::class, 'fieldUid' => $field->uid],
+                ],
+            ],
+        ]);
+        $entryType->setFieldLayout($layout);
+        $I->assertTrue(Craft::$app->getEntries()->saveEntryType($entryType), json_encode($entryType->getErrors()));
+
+        $siteIds ??= [(int)Craft::$app->getSites()->getPrimarySite()->id];
+        $section = new Section();
+        $section->name = 'Ether Pages ' . ($suffix !== '' ? $suffix : 'Base');
+        $section->handle = 'etherPages' . $suffix;
+        $section->type = Section::TYPE_CHANNEL;
+        $section->setSiteSettings(array_map(
+            static fn(int $siteId): Section_SiteSettings => new Section_SiteSettings([
+                'siteId' => $siteId,
+                'enabledByDefault' => true,
+                'hasUrls' => false,
+            ]),
+            $siteIds,
+        ));
+        $section->setEntryTypes([$entryType]);
+        $I->assertTrue(Craft::$app->getEntries()->saveSection($section), json_encode($section->getErrors()));
+
+        $entries = [];
+        foreach (array_keys($shapes) as $title) {
+            $entry = new Entry();
+            $entry->sectionId = $section->id;
+            $entry->typeId = $entryType->id;
+            $entry->title = $title;
+            $entry->postDate = new DateTime('-1 hour');
+            $entry->setFieldValue($handle, ['title' => 'placeholder']);
+            $I->assertTrue(Craft::$app->getElements()->saveElement($entry), json_encode($entry->getErrors()));
+            $entries[$title] = (int)$entry->id;
+        }
+
+        // The content key = the field's layout element UID — read it from the
+        // PERSISTED row (the in-memory layout object's uid can diverge from
+        // what the save actually wrote).
+        $layoutElementUid = null;
+        $firstRow = (new Query())->select(['content'])->from(Table::ELEMENTS_SITES)
+            ->where(['elementId' => reset($entries)])->one();
+        foreach ((array)Json::decodeIfJson($firstRow['content']) as $key => $val) {
+            $val = Json::decodeIfJson($val);
+            if (is_array($val) && ($val['title'] ?? null) === 'placeholder') {
+                $layoutElementUid = (string)$key;
+                break;
+            }
+        }
+        $I->assertNotNull($layoutElementUid, 'find the layout element uid in the stored content row');
+
+        foreach ($shapes as $title => $shape) {
+            // EVERY row for the element: a localized entry carries one per
+            // site, and the migration is judged on all of them.
+            $rows = (new Query())->select(['id', 'content'])->from(Table::ELEMENTS_SITES)
+                ->where(['elementId' => $entries[$title]])->all();
+            foreach ($rows as $row) {
+                $content = Json::decodeIfJson($row['content']) ?: [];
+                $content[$layoutElementUid] = $shape;
+                // Pass the ARRAY — a pre-encoded string double-encodes on JSON columns.
+                Db::update(Table::ELEMENTS_SITES, ['content' => $content], ['id' => $row['id']]);
+            }
+        }
+
+        // Flip the stored field type to ether's class: pre-migration state.
+        Db::update(Table::FIELDS, ['type' => EtherMigrationService::ETHER_FIELD_TYPE], ['id' => $field->id]);
+        Craft::$app->getFields()->refreshFields();
+
+        return [
+            'field' => $field,
+            'handle' => $handle,
+            'entries' => $entries,
+            'layoutElementUid' => (string)$layoutElementUid,
+        ];
+    }
+
+    /**
+     * The migrated field value of one fixture entry.
+     *
+     * @param array{field: SeoField, handle: string, entries: array<string, int>, layoutElementUid: string} $install
+     */
+    private function _value(array $install, string $key): SeoData
+    {
+        $entry = Entry::find()->id($install['entries'][$key])->status(null)->one();
+        /** @var SeoData $value */
+        $value = $entry->getFieldValue($install['handle']);
+
+        return $value;
+    }
+
+    /**
+     * The RAW stored content document of one fixture entry's field value —
+     * read without hydrating, so an unconverted ether shape stays visible.
+     *
+     * @param array{field: SeoField, handle: string, entries: array<string, int>, layoutElementUid: string} $install
+     * @return array<array-key, mixed>
+     */
+    private function _storedValue(array $install, string $key): array
+    {
+        $raw = (new Query())->select(['content'])->from(Table::ELEMENTS_SITES)
+            ->where(['elementId' => $install['entries'][$key]])->scalar();
+        $content = SeoFieldReader::decodeContentDocument($raw) ?? [];
+
+        return SeoFieldReader::decodeFieldValue($content, $install['layoutElementUid']) ?? [];
     }
 }
