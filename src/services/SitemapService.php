@@ -420,6 +420,10 @@ class SitemapService extends Component
      * entry is live with a URL (ethercreative/seo#318), from one lean query.
      * Single-site entries get none; multi-site entries carry the full set.
      *
+     * Rows whose content carries noindex are excluded here too: the noindex
+     * toggle removes a page from its own site's sitemap, and an hreflang
+     * link is the same index signal through a side door.
+     *
      * @param int[] $ids
      * @return array<int, array<int, SitemapAlternate>>
      */
@@ -430,14 +434,17 @@ class SitemapService extends Component
         }
 
         $rows = $this->_rowQuery($section, null)
-            ->select(['es.elementId', 'es.siteId', 'es.uri'])
+            ->select(['es.elementId', 'es.siteId', 'es.uri', 'es.content'])
             ->andWhere(['es.elementId' => $ids])
             ->orderBy(['es.elementId' => SORT_ASC, 'es.siteId' => SORT_ASC])
             ->all();
-        /** @var array<int, array{elementId: int|string, siteId: int|string, uri: string}> $rows */
+        /** @var array<int, array{elementId: int|string, siteId: int|string, uri: string, content: string|array<array-key, mixed>|null}> $rows */
 
         $byElement = [];
         foreach ($rows as $row) {
+            if (SeoFieldReader::noindexFromContent($row['content'])) {
+                continue;
+            }
             $byElement[(int)$row['elementId']][] = $row;
         }
 
