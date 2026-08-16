@@ -1,5 +1,28 @@
 # Release Notes for Simple SEO
 
+## 1.0.1 - 2026-08-16
+
+Correctness fixes found by an adversarial review of the 1.0.0 code. No new features, no schema change — updating is a straight `composer update`.
+
+### Fixed
+
+- hreflang alternates no longer advertise noindexed translations. An entry live on several sites correctly dropped out of its own site's sitemap when marked noindex, but every sibling site still linked to it as an `<xhtml:link rel="alternate">` — the same index signal through a side door ([#4](https://github.com/anvildevxyz/craft-simple-seo/issues/4))
+- Canonical query strings keep their exact shape. Filtering ran through PHP's `parse_str()`, which renamed dotted params (`utm.id` became `utm_id`, so a dotted `canonicalAllowedQueryParams` entry could never match its own param), collapsed repeated params to the last value, and stamped `=` onto valueless ones ([#5](https://github.com/anvildevxyz/craft-simple-seo/issues/5))
+- Protocol-relative canonical overrides (`//cdn.example.com/page`) keep their leading `//` instead of degrading into a relative path that crawlers resolve against the current page ([#8](https://github.com/anvildevxyz/craft-simple-seo/issues/8))
+- The pagination suffix now applies only to the element the request actually resolved to. Rendering meta for a different element on `/blog/p2` — a featured entry, a GraphQL list item — gave it a page-two URL it does not have ([#7](https://github.com/anvildevxyz/craft-simple-seo/issues/7))
+- `craft simple-seo/doctor --json --quiet` reports problems only. The JSON branch returned before the quiet filter ran, so a pipeline gating on `.findings | length` fired on every healthy run ([#9](https://github.com/anvildevxyz/craft-simple-seo/issues/9))
+- The MCP tools' error responses can no longer carry a server path: an anonymous exception class embeds its defining file in its own name, which the reported exception type passed straight through
+
+### Changed
+
+- **An explicit `null` override now clears its value.** `{ description: null }` and `{ canonical: null }` were silently ignored while `{ robots: null }` and `{ ogImage: null }` cleared their tags — one overrides array, two opposite meanings for the same input. Every key now clears on `null`: description, canonical (tag, `og:url`, and the `Link` header), robots, and the social image render nothing at all, and `ogType`, `ogSiteName`, and `twitterCard` fall back to their defaults. `title` is the one deliberate exception — a page always has a title, so a `null` title runs the normal fallback chain ([#6](https://github.com/anvildevxyz/craft-simple-seo/issues/6))
+
+### Internal
+
+- Consolidation with no behavior change: one shared blank-to-null helper behind the field, the MCP tools, and the services; raw responses through Craft's own `asRaw()`; shared PHPStan type aliases; the last model-to-service dependency cycle removed
+- MCP failure logs now carry the exception class, file, line, and stack trace. The response the client receives is unchanged — the details belong in the Craft logs, not on the wire
+- Test suite grown to 74 unit and 89 integration tests, including a regression case for every fix above
+
 ## 1.0.0 - 2026-08-13
 
 First release. Simple SEO does the SEO work every Craft site needs and deliberately nothing else.
