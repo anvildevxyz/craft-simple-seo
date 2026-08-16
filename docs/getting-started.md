@@ -38,6 +38,6 @@ Per-template overrides when a section warrants them:
 {{ craft.simpleSeo.renderMeta(entry, { ogType: 'article' }) }}
 ```
 
-Available override keys: `title`, `description`, `canonical`, `robots`, `ogType`, `ogSiteName`, `ogImage`, `twitterCard`. A typo'd key throws — nothing silently does nothing.
+Available override keys: `title`, `description`, `canonical`, `robots`, `ogType`, `ogSiteName`, `ogImage`, `twitterCard`. A typo'd key throws — nothing silently does nothing. An explicit `null` clears a value (no tag rendered; `ogType`/`ogSiteName`/`twitterCard` reset to their defaults) — except `title`, which treats `null` as absent because a page always has a title.
 
 That's it. `/sitemap.xml` and `/robots.txt` already work with zero configuration.

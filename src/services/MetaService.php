@@ -17,6 +17,7 @@ use craft\helpers\Html;
 use craft\models\Site;
 use craft\web\Request as WebRequest;
 use craft\web\Response as WebResponse;
+use craft\web\UrlManager;
 use Twig\Markup;
 use yii\base\Component;
 use yii\base\InvalidArgumentException;
@@ -58,6 +59,12 @@ class MetaService extends Component
      * Resolves the final meta for an element (or the current site when null),
      * with optional per-template overrides — og:type and og:site_name are
      * overridable by design (ethercreative/seo#517, #495).
+     *
+     * An explicit null override CLEARS its value: description, canonical,
+     * robots, and ogImage render no tag at all; ogType, ogSiteName, and
+     * twitterCard reset to their computed defaults. The one exception is
+     * title — a page always has a title, so a null title override is
+     * treated as absent and the fallback chain runs.
      *
      * @param array<string, string|null> $overrides
      * @throws InvalidArgumentException if an override key is not supported —
@@ -146,12 +153,20 @@ class MetaService extends Component
         $fallbackTitle = trim((string)($element->title ?? ''));
         $socialTitle = trim((string)($value?->title ?? $fallbackTitle));
 
-        $explicit = $overrides['canonical'] ?? $value?->canonical;
+        if (array_key_exists('canonical', $overrides)) {
+            $explicit = $overrides['canonical'];
+            $canonicalSource = ResolvedMeta::SOURCE_OVERRIDE;
+        } else {
+            $explicit = $value?->canonical;
+            $canonicalSource = ResolvedMeta::SOURCE_FIELD;
+        }
+
         if ($explicit !== null && trim($explicit) !== '') {
             $canonical = Canonical::normalize($explicit, [], true);
-            $canonicalSource = isset($overrides['canonical'])
-                ? ResolvedMeta::SOURCE_OVERRIDE
-                : ResolvedMeta::SOURCE_FIELD;
+        } elseif ($canonicalSource === ResolvedMeta::SOURCE_OVERRIDE) {
+            // An explicit null/blank override suppresses the canonical —
+            // same null semantics as robots and ogImage.
+            $canonical = null;
         } else {
             $canonical = $this->_elementCanonical($element, $settings);
             $canonicalSource = ResolvedMeta::SOURCE_ELEMENT_URL;
@@ -183,7 +198,7 @@ class MetaService extends Component
         }
 
         [$description, $descriptionSource] = match (true) {
-            isset($overrides['description']) => [$overrides['description'], ResolvedMeta::SOURCE_OVERRIDE],
+            array_key_exists('description', $overrides) => [$overrides['description'], ResolvedMeta::SOURCE_OVERRIDE],
             $value?->description !== null => [$value->description, ResolvedMeta::SOURCE_FIELD],
             default => [$defaults->defaultDescription, ResolvedMeta::SOURCE_SITE_DEFAULT],
         };
@@ -238,7 +253,7 @@ class MetaService extends Component
         $request = Craft::$app->getRequest();
         if ($request instanceof WebRequest && !$request->getIsConsoleRequest() && !$request->getIsCpRequest()) {
             $pageNum = $request->getPageNum();
-            if ($pageNum > 1) {
+            if ($pageNum > 1 && $this->_isMatchedElement($element)) {
                 $trigger = $general->getPageTrigger();
                 $url = Canonical::paginated($url, $pageNum, $trigger);
                 if (str_starts_with($trigger, '?')) {
@@ -248,6 +263,31 @@ class MetaService extends Component
         }
 
         return Canonical::normalize($url, $allowed);
+    }
+
+    /**
+     * Whether the element is the one the current request's URL resolved to.
+     * The page suffix describes the REQUEST's pagination, so it belongs only
+     * on the matched element's canonical — any other element rendered on a
+     * paginated page (a featured entry, a GraphQL list item) has no page N
+     * of its own.
+     */
+    private function _isMatchedElement(?ElementInterface $element): bool
+    {
+        if ($element === null) {
+            return false;
+        }
+
+        $urlManager = Craft::$app->getUrlManager();
+        if (!$urlManager instanceof UrlManager) {
+            return false;
+        }
+
+        $matched = $urlManager->getMatchedElement();
+
+        return $matched instanceof ElementInterface
+            && (int)$matched->id === (int)$element->id
+            && (int)$matched->siteId === (int)$element->siteId;
     }
 
     /**
