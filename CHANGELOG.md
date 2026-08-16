@@ -1,6 +1,8 @@
 # Release Notes for Simple SEO
 
-## Unreleased
+## 1.0.2 - 2026-08-16
+
+Fixes for the ether/seo migration, found by running it against a real ether install. No schema change — updating is a straight `composer update`. If you have already migrated from ether/seo, re-run the migration after updating.
 
 ### Fixed
 
