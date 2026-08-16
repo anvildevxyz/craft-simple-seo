@@ -9,9 +9,12 @@ use anvildev\simpleseo\services\SitemapService;
 use Craft;
 use craft\db\Query;
 use craft\db\Table;
+use craft\helpers\Db;
 use craft\helpers\Json;
 use craft\models\EntryType;
 use craft\models\Section;
+use craft\models\Section_SiteSettings;
+use craft\models\Site;
 use IntegrationTester;
 use yii\web\NotFoundHttpException;
 
@@ -346,6 +349,90 @@ class SitemapCest
 
         SeoFieldReader::clearMemos();
         $I->assertTrue(SeoFieldReader::noindexFromContent($doubleEncoded), 'double-encoded content still detects noindex');
+    }
+
+    /**
+     * A translation marked noindex drops out of the OTHER sites' hreflang
+     * alternates, not just its own site's sitemap — an alternate link is the
+     * same index signal through a side door (#4).
+     */
+    public function noindexedTranslationIsExcludedFromAlternates(IntegrationTester $I): void
+    {
+        $sites = Craft::$app->getSites();
+        $primary = $sites->getPrimarySite();
+        $sitemap = Plugin::getInstance()->getSitemap();
+
+        $altSite = new Site([
+            'groupId' => $primary->getGroup()->id,
+            'name' => 'Hreflang Alt',
+            'handle' => 'hreflangAlt',
+            'language' => 'de',
+            'baseUrl' => 'https://alt.example.test/',
+        ]);
+        $I->assertTrue($sites->saveSite($altSite), 'save alt site: ' . json_encode($altSite->getErrors()));
+
+        // The section must carry BOTH sites before the entry exists, so the
+        // entry propagates and gets an elements_sites row per site.
+        $fixture = $I->createSeoSection('hreflangPages', [
+            'name' => 'Hreflang Pages',
+            'typeName' => 'Hreflang Page',
+            'typeHandle' => 'hreflangPage',
+            'uriFormat' => 'hreflang-pages/{slug}',
+            'template' => '_page',
+        ]);
+        /** @var Section $section */
+        $section = $fixture['section'];
+        $siteSettings = $section->getSiteSettings();
+        $siteSettings[$altSite->id] = new Section_SiteSettings([
+            'siteId' => $altSite->id,
+            'enabledByDefault' => true,
+            'hasUrls' => true,
+            'uriFormat' => 'hreflang-pages/{slug}',
+            'template' => '_page',
+        ]);
+        $section->setSiteSettings($siteSettings);
+        $I->assertTrue(
+            Craft::$app->getEntries()->saveSection($section),
+            'add alt site to section: ' . json_encode($section->getErrors()),
+        );
+
+        // A non-empty seo value, so the content rows carry a value whose
+        // noindex the mutation below can flip.
+        $entry = $I->createEntryWithSeo($fixture, 'Alternate Page', ['title' => 'Alternate meta']);
+
+        // Positive control: live on both sites, the alternate renders.
+        $sitemap->invalidate();
+        $xml = (string)$sitemap->getSectionXml($primary, 'hreflangPages');
+        $I->assertStringContainsString('hreflang="de"', $xml, 'positive control: alt-site alternate renders');
+
+        // Mark ONLY the alt site's row noindexed — what a translated field
+        // value does — by editing the stored content document directly.
+        $raw = (new Query())
+            ->select(['content'])
+            ->from(Table::ELEMENTS_SITES)
+            ->where(['elementId' => $entry->id, 'siteId' => $altSite->id])
+            ->scalar();
+        $content = SeoFieldReader::decodeContentDocument($raw);
+        $I->assertNotNull($content, 'alt-site row carries a content document');
+        $flipped = false;
+        foreach (SeoFieldReader::elementUidsForFieldUids([(string)$fixture['field']->uid]) as $uid) {
+            $value = SeoFieldReader::decodeFieldValue($content, $uid);
+            if ($value !== null) {
+                $value['noindex'] = true;
+                $content[$uid] = $value;
+                $flipped = true;
+            }
+        }
+        $I->assertTrue($flipped, 'found the seo value in the alt-site content document');
+        Db::update(Table::ELEMENTS_SITES, ['content' => Json::encode($content)], [
+            'elementId' => $entry->id,
+            'siteId' => $altSite->id,
+        ]);
+
+        $sitemap->invalidate();
+        $xml = (string)$sitemap->getSectionXml($primary, 'hreflangPages');
+        $I->assertStringContainsString('hreflang-pages/alternate-page', $xml, 'the primary-site URL itself stays listed');
+        $I->assertStringNotContainsString('hreflang="de"', $xml, 'the noindexed translation no longer appears as an alternate');
     }
 
     // Private Methods
