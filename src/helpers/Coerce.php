@@ -31,4 +31,19 @@ final class Coerce
 
         return $value === '' ? null : $value;
     }
+
+    /**
+     * Reads an asset ID out of the shapes an element select posts and a
+     * foreign plugin stores: a number, `[N]`, `{id: N}`, or `[{id: N}]`.
+     * Anything else, including zero and blanks, becomes null.
+     */
+    public static function assetId(mixed $value): ?int
+    {
+        if (is_array($value)) {
+            $first = $value[0] ?? null;
+            $value = $value['id'] ?? (is_array($first) ? ($first['id'] ?? null) : $first);
+        }
+
+        return is_numeric($value) && (int)$value > 0 ? (int)$value : null;
+    }
 }
