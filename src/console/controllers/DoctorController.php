@@ -55,16 +55,17 @@ class DoctorController extends Controller
     {
         $findings = Plugin::getInstance()->getDiagnostics()->run();
         $problems = array_filter($findings, static fn(Finding $f): bool => $f->isProblem());
+        // --quiet filters both outputs the same way; the problems count and
+        // the exit code always come from the full set.
+        $shown = $this->quiet ? $problems : $findings;
 
         if ($this->json) {
-            $this->stdout(Json::encode(Finding::listPayload($findings), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
+            $this->stdout(Json::encode(Finding::listPayload($shown), JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE) . "\n");
 
             return $problems === [] ? ExitCode::OK : ExitCode::UNSPECIFIED_ERROR;
         }
 
         $this->stdout("\nSimple SEO check\n\n", Console::BOLD);
-
-        $shown = array_filter($findings, fn(Finding $f): bool => !$this->quiet || $f->isProblem());
 
         // Size the columns to the content. Site names are author-supplied and
         // routinely wider than a guessed width, and padding has to be
