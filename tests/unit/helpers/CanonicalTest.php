@@ -96,6 +96,68 @@ class CanonicalTest extends TestCase
     }
 
     /**
+     * The query string's shape survives: dotted names are not renamed to
+     * underscores, repeated params keep every value, and a valueless param
+     * gains no `=` — the parse_str() mangles (#5).
+     */
+    public function testQueryShapeSurvivesVerbatim(): void
+    {
+        $this->assertSame(
+            'https://example.com/p?utm.id=5&flag&a=1&a=2',
+            Canonical::normalize('https://example.com/p?utm.id=5&flag&a=1&a=2', [], true),
+        );
+    }
+
+    /**
+     * A dotted allowlist entry matches its param — parse_str() renamed the
+     * key before the comparison, so the allowlisted param was always
+     * stripped (#5).
+     */
+    public function testDottedAllowlistEntryMatches(): void
+    {
+        $this->assertSame(
+            'https://example.com/p?utm.source=news',
+            Canonical::normalize('https://example.com/p?utm.source=news&other=x', ['utm.source']),
+        );
+    }
+
+    /**
+     * An allowlisted array param keeps every member — `page` covers
+     * `page[0]`, as the parse_str() implementation did.
+     */
+    public function testAllowlistCoversArrayParams(): void
+    {
+        $this->assertSame(
+            'https://example.com/p?page%5B0%5D=1&page%5B1%5D=2',
+            Canonical::normalize('https://example.com/p?page[0]=1&page[1]=2&drop=x', ['page']),
+        );
+    }
+
+    /**
+     * A `+` in a query value means a space and re-encodes as %20 — the
+     * form-encoding convention parse_str() honored stays honored.
+     */
+    public function testPlusMeansSpaceInQueryValues(): void
+    {
+        $this->assertSame(
+            'https://example.com/p?q=a%20b',
+            Canonical::normalize('https://example.com/p?q=a+b', [], true),
+        );
+    }
+
+    /**
+     * A protocol-relative URL keeps its leading `//` instead of degrading
+     * into a relative path (#8).
+     */
+    public function testProtocolRelativeUrlKeepsItsSlashes(): void
+    {
+        $this->assertSame(
+            '//cdn.example.com/page',
+            Canonical::normalize('//cdn.example.com/page'),
+        );
+    }
+
+    /**
      * Fragments never belong on a canonical.
      */
     public function testFragmentIsStripped(): void

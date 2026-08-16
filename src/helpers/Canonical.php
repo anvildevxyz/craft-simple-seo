@@ -25,6 +25,12 @@ final class Canonical
      * query params against the allowlist (or keeps them all for
      * author-entered URLs), and strips fragments and credentials.
      *
+     * The query is processed pair by pair, never through parse_str() — PHP's
+     * variable rules would rename `utm.id` to `utm_id`, collapse repeated
+     * params to the last value, and stamp `=` onto valueless params. Names
+     * survive verbatim; each name and value is re-encoded idempotently, the
+     * same way as path segments.
+     *
      * @param string[] $allowedQueryParams Query params to keep; ignored when
      * $keepAllQueryParams is true
      */
@@ -45,12 +51,31 @@ final class Canonical
 
         $query = '';
         if (isset($parts['query']) && $parts['query'] !== '') {
-            parse_str($parts['query'], $params);
-            if (!$keepAllQueryParams) {
-                $params = array_intersect_key($params, array_flip($allowedQueryParams));
+            $pairs = [];
+            foreach (explode('&', $parts['query']) as $pair) {
+                if ($pair === '') {
+                    continue;
+                }
+                $hasValue = str_contains($pair, '=');
+                [$name, $value] = array_pad(explode('=', $pair, 2), 2, '');
+                // urldecode(), not rawurldecode(): `+` means a space in a
+                // query string, and must re-encode as %20, not %2B.
+                $name = urldecode($name);
+                if ($name === '') {
+                    continue;
+                }
+                // `page` also covers `page[0]` — an allowlisted array param
+                // keeps every member.
+                $base = (string)preg_replace('/\[.*/s', '', $name);
+                if (!$keepAllQueryParams && !in_array($base, $allowedQueryParams, true)) {
+                    continue;
+                }
+                $pairs[] = rawurlencode($name) . ($hasValue ? '=' . rawurlencode(urldecode($value)) : '');
             }
-            if ($params !== []) {
-                $query = str_replace('%2F', '/', http_build_query($params, '', '&', PHP_QUERY_RFC3986));
+            if ($pairs !== []) {
+                // Slashes stay readable: Craft path-param URLs
+                // (`?p=some/long/path`) must survive as the URLs they describe.
+                $query = str_replace('%2F', '/', implode('&', $pairs));
             }
         }
 
@@ -92,12 +117,18 @@ final class Canonical
     /**
      * Reassembles the scheme://host:port prefix from parse_url() parts —
      * empty for relative URLs, credentials (and everything else) dropped.
+     * A host without a scheme keeps its `//`: a protocol-relative input
+     * must not degrade into a relative path.
      *
      * @param array<string, string|int> $parts
      */
     private static function _origin(array $parts): string
     {
-        $origin = isset($parts['scheme']) ? $parts['scheme'] . '://' : '';
+        $origin = match (true) {
+            isset($parts['scheme']) => $parts['scheme'] . '://',
+            isset($parts['host']) => '//',
+            default => '',
+        };
         $origin .= $parts['host'] ?? '';
 
         return isset($parts['port']) ? $origin . ':' . $parts['port'] : $origin;
