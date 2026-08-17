@@ -8,7 +8,7 @@ If your site runs [ether/seo](https://plugins.craftcms.com/seo) — the free "SE
 |---|---|
 | SEO field (title, description) | SEO field — migrated **in place**, layouts untouched |
 | Social title/image (Twitter/Facebook) | Social image (migrated), og/twitter tags rendered for you |
-| Robots (noindex/nofollow) | Migrated; plus the [never-de-index-by-accident invariant](robots.md) |
+| Robots (all six switches) | Migrated — `noindex` and `nofollow` become the two toggles, `noarchive`, `nosnippet`, `notranslate`, and `noimageindex` carry over as extra directives; plus the [never-de-index-by-accident invariant](robots.md) |
 | Canonical | Migrated; plus [UTF-8 encoding, param stripping, pagination](canonicals.md) |
 | Sitemap | Zero-config sitemap with a [diagnosis view](sitemap.md) — never silently empty |
 | Redirects | Exported as a **Retour-importable CSV** — redirects belong in [Retour](https://plugins.craftcms.com/retour) |
@@ -31,7 +31,7 @@ php craft plugin/install simple-seo
 php craft simple-seo/migrate/ether
 ```
 
-You'll see: the ether fields found, how many values would convert (per site), what maps (titles, descriptions, images, robots, canonicals), how many focus-keyword sets would be dropped, how many redirects would export, and ether's settings for review.
+You'll see: the ether fields found, how many values would convert (per site), what maps (titles, descriptions, images, robots, extra directives, canonicals), how many focus-keyword sets would be dropped, how many redirects would export, and ether's settings for review.
 
 **3. Back up, then apply:**
 

@@ -100,7 +100,15 @@ class MigrateController extends Controller
         $verb = $report->applied ? 'converted' : 'would convert';
         $lines = [
             sprintf('%d ether value(s) found; %s %d (%d already migrated, skipped)', $report->etherValues, $verb, $report->converted, $report->alreadyMigrated),
-            sprintf('  titles: %d, descriptions: %d, images: %d, robots: %d, canonicals: %d', $report->titles, $report->descriptions, $report->images, $report->robots, $report->canonicals),
+            sprintf(
+                '  titles: %d, descriptions: %d, images: %d, robots: %d, extra directives: %d, canonicals: %d',
+                $report->titles,
+                $report->descriptions,
+                $report->images,
+                $report->robots,
+                $report->directives,
+                $report->canonicals,
+            ),
         ];
 
         foreach ($report->perSite as $siteId => $count) {
