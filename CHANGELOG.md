@@ -1,6 +1,6 @@
 # Release Notes for Simple SEO
 
-## Unreleased
+## 1.0.4 - 2026-08-18
 
 Three more ether/seo migration gaps, found by running the migration against ether's complete data surface — its settings, its per-field defaults, and its sitemap table, not just its field values. No schema change.
 
