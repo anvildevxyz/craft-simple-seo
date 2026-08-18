@@ -1,6 +1,8 @@
 # Release Notes for Simple SEO
 
-## Unreleased
+## 1.0.3 - 2026-08-18
+
+One more ether/seo migration fix, found by running the migration against a real ether install. No schema change — updating is a straight `composer update`. **If you have already migrated from ether/seo, re-run `craft simple-seo/migrate/ether --apply` after updating**; the run is idempotent and recovers the directives it skipped.
 
 ### Fixed
 
