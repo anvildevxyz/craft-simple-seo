@@ -1,5 +1,15 @@
 # Release Notes for Simple SEO
 
+## Unreleased
+
+### Fixed
+
+- The ether migration no longer drops robots directives. Ether's robots UI is six switches, not two: past `noindex` and `nofollow` it writes `noarchive`, `nosnippet`, `notranslate`, and `noimageindex`, and Simple SEO renders all four — but the migration hardcoded an empty directive list. A page ether kept out of the cache came back cacheable, and a page carrying only the extras lost its robots tag entirely, neither of them mentioned in the report. **If you already migrated, re-run `craft simple-seo/migrate/ether --apply` after updating.** Found by migrating a real ether/seo 5.0.0 install
+
+### Changed
+
+- The migration report counts extra robots directives, both the ones carried over and any ether directive Simple SEO cannot render
+
 ## 1.0.2 - 2026-08-16
 
 Fixes for the ether/seo migration, found by running it against a real ether install. No schema change — updating is a straight `composer update`. If you have already migrated from ether/seo, re-run the migration after updating.

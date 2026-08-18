@@ -168,6 +168,21 @@ class EtherMigrationCest
             'RobotsNone' => ['advanced' => ['robots' => ['none']]],
             // A hand-edited or older row can hold the directives as a string.
             'RobotsString' => ['advanced' => ['robots' => 'noindex, nofollow']],
+            // Ether's robots UI is six switches, and the four past
+            // noindex/nofollow are directives Simple SEO renders too. Mapping
+            // only the toggles dropped them from the rendered tag in silence.
+            'RobotsEveryDirective' => ['advanced' => ['robots' => [
+                'noindex', 'nofollow', 'noarchive', 'nosnippet', 'notranslate', 'noimageindex',
+            ]]],
+            // Switched-off directives leave gaps in ether's array, so a value
+            // carrying ONLY the extras stores as a JSON object keyed by the
+            // surviving indexes — verified against ether/seo 5.0.0. Such a
+            // value has no toggle at all, so dropping the extras left it with
+            // no robots tag whatsoever.
+            'RobotsExtrasOnly' => ['advanced' => ['robots' => ['4' => 'notranslate', '5' => 'noimageindex']]],
+            // A directive we cannot render is dropped — but counted, because a
+            // directive a crawler ignores only looks like it works.
+            'RobotsUnknown' => ['advanced' => ['robots' => ['noindex', 'nocache']]],
             'BlankCanonical' => ['advanced' => ['canonical' => '   ']],
         ]);
         $shapeCount = count($install['entries']);
@@ -181,7 +196,11 @@ class EtherMigrationCest
         $I->assertSame(4, $report->titles);
         $I->assertSame(2, $report->descriptions);
         $I->assertSame(5, $report->images);
-        $I->assertSame(2, $report->robots);
+        // none, the string form, every directive, and the unknown one — the
+        // extras-only value has no toggle, so it is not among them.
+        $I->assertSame(4, $report->robots);
+        $I->assertSame(2, $report->directives, 'values carrying extra directives');
+        $I->assertSame(1, $report->droppedDirectives, 'nocache is not a directive we render');
         $I->assertSame(0, $report->canonicals);
 
         Craft::$app->getFields()->refreshFields();
@@ -208,6 +227,27 @@ class EtherMigrationCest
         $stringRobots = $value('RobotsString');
         $I->assertTrue($stringRobots->noindex, 'a string robots value still hides the page');
         $I->assertTrue($stringRobots->nofollow);
+
+        // The rendered tag is the real assertion: ether rendered all six, so
+        // anything less is a page that changed how crawlers treat it.
+        $every = $value('RobotsEveryDirective');
+        $I->assertSame(
+            'noindex, nofollow, noarchive, nosnippet, noimageindex, notranslate',
+            $every->robots(),
+            'every ether directive survives into the rendered tag',
+        );
+
+        $extrasOnly = $value('RobotsExtrasOnly');
+        $I->assertFalse($extrasOnly->noindex, 'the extras carry no toggle of their own');
+        $I->assertSame(
+            'noimageindex, notranslate',
+            $extrasOnly->robots(),
+            'a value with only extras still renders a robots tag',
+        );
+
+        $unknown = $value('RobotsUnknown');
+        $I->assertTrue($unknown->noindex);
+        $I->assertSame([], $unknown->robotsDirectives, 'an unrenderable directive is not stored');
 
         $I->assertNull($value('BlankCanonical')->canonical, 'a whitespace-only canonical is no canonical');
     }

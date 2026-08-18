@@ -176,6 +176,10 @@ class EtherMigrationService extends Component
             $report->notes[] = "Dropped $report->droppedSocialFields per-network social value(s): Simple SEO renders one social title, description, and image for every network.";
         }
 
+        if ($report->droppedDirectives > 0) {
+            $report->notes[] = "Dropped $report->droppedDirectives robots directive(s) Simple SEO does not render: a directive a crawler ignores only looks like it works.";
+        }
+
         // Content rows were rewritten with raw SQL, so no element-save event
         // fired. Without this, cached sitemap files keep listing entries the
         // migration just marked noindex, and the memoized field-layout UIDs
@@ -341,13 +345,29 @@ class EtherMigrationService extends Component
         // Ether's own UI writes a list, but a hand-edited or older row can
         // hold the directives as one string. Reading only the list shape
         // would silently turn a hidden page back into an indexable one.
+        // Switched-off directives leave gaps in ether's array, which stores as
+        // a JSON object keyed by the surviving indexes — array_values() flattens
+        // both that and the plain list back to the same thing.
         $robots = match (true) {
             is_array($robotsRaw) => array_map('strval', array_values($robotsRaw)),
             is_string($robotsRaw) => array_map('trim', explode(',', $robotsRaw)),
             default => [],
         };
+        $robots = array_values(array_filter($robots, static fn(string $d): bool => $d !== ''));
         $noindex = in_array('noindex', $robots, true) || in_array('none', $robots, true);
         $nofollow = in_array('nofollow', $robots, true) || in_array('none', $robots, true);
+
+        // Ether's robots UI is SIX switches, not two: past noindex and nofollow
+        // it writes noarchive, nosnippet, notranslate, and noimageindex, and
+        // every one of those is a directive Simple SEO renders. Mapping only
+        // the two toggles dropped them from the rendered tag without a word in
+        // the report — an entry ether kept out of the cache came back
+        // cacheable, and one carrying only the extras lost its robots tag.
+        $directives = SeoData::canonicalizeDirectives($robots);
+
+        // Anything left is a directive we cannot render. Counted, never silent.
+        $unmapped = array_unique(array_diff($robots, ['noindex', 'nofollow', 'none'], $directives));
+        $report->droppedDirectives += count($unmapped);
 
         $canonical = Coerce::stringOrNull($old['advanced']['canonical'] ?? null);
 
@@ -363,6 +383,9 @@ class EtherMigrationService extends Component
         if ($noindex || $nofollow) {
             $report->robots++;
         }
+        if ($directives !== []) {
+            $report->directives++;
+        }
         if ($canonical !== null) {
             $report->canonicals++;
         }
@@ -377,9 +400,7 @@ class EtherMigrationService extends Component
             'noindex' => $noindex,
             'nofollow' => $nofollow,
             'canonical' => $canonical,
-            // ether/seo has no equivalent of the extra directives — its robots
-            // UI is the same two toggles, so there is nothing to carry over.
-            'robotsDirectives' => [],
+            'robotsDirectives' => $directives,
         ];
     }
 

@@ -64,9 +64,16 @@ class EtherMigrationReport extends Model
     public int $images = 0;
 
     /**
-     * @var int Robots directives mapped.
+     * @var int Values whose noindex/nofollow toggles mapped.
      */
     public int $robots = 0;
+
+    /**
+     * @var int Values carrying at least one of ether's extra robots directives
+     * (noarchive, nosnippet, notranslate, noimageindex), all of which Simple
+     * SEO renders too.
+     */
+    public int $directives = 0;
 
     /**
      * @var int Canonicals mapped.
@@ -85,6 +92,12 @@ class EtherMigrationReport extends Model
      * Simple SEO renders one set for every network. Reported, never silent.
      */
     public int $droppedSocialFields = 0;
+
+    /**
+     * @var int Robots directives dropped because Simple SEO does not render
+     * them. Reported, never silent.
+     */
+    public int $droppedDirectives = 0;
 
     /**
      * @var int Redirect rows found in ether's table.
