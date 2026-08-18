@@ -100,6 +100,41 @@ class EtherMigrationReport extends Model
     public int $droppedDirectives = 0;
 
     /**
+     * @var string[] Ether's SITE-WIDE robots directives, from its plugin
+     * settings. Ether applies these to every element whose own robots is
+     * empty, so they are a live indexing rule, not a preference.
+     */
+    public array $etherSiteWideRobots = [];
+
+    /**
+     * @var int Converted values carrying no robots of their own, which ether
+     * was therefore serving {@see self::$etherSiteWideRobots} for. Simple SEO
+     * deliberately has no settings-screen equivalent, so these render no
+     * robots tag after the migration.
+     */
+    public int $inheritedSiteWideRobots = 0;
+
+    /**
+     * @var array<string, string[]> Ether FIELD-level settings that do not
+     * carry over, keyed by field handle. Ether's per-field defaults have no
+     * per-field equivalent here — Simple SEO's defaults are per site.
+     */
+    public array $droppedFieldSettings = [];
+
+    /**
+     * @var int Rows in ether's sitemap table. Simple SEO manages sitemaps in
+     * its own per-site settings, so none of it is imported.
+     */
+    public int $sitemapRowsFound = 0;
+
+    /**
+     * @var string[] Sources ether had switched OFF in its sitemap. These are
+     * the ones whose absence changes the output: Simple SEO includes every
+     * section with URLs until told otherwise.
+     */
+    public array $sitemapDisabledSources = [];
+
+    /**
      * @var int Redirect rows found in ether's table.
      */
     public int $redirectsFound = 0;

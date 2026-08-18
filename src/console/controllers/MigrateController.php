@@ -115,6 +115,10 @@ class MigrateController extends Controller
             $lines[] = "  site $siteId: $count value(s)";
         }
 
+        if ($report->sitemapRowsFound > 0) {
+            $lines[] = sprintf('%d ether sitemap row(s) found — none imported', $report->sitemapRowsFound);
+        }
+
         $lines[] = sprintf(
             '%d redirect(s) found%s',
             $report->redirectsFound,

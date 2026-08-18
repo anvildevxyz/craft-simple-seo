@@ -52,6 +52,28 @@ class EtherMigrationService extends Component
      */
     public const ETHER_REDIRECTS_TABLE = '{{%seo_redirects}}';
 
+    /**
+     * @var string Ether's sitemap table.
+     */
+    public const ETHER_SITEMAP_TABLE = '{{%seo_sitemap}}';
+
+    /**
+     * @var array<string, string> Ether's PER-FIELD settings that cannot come
+     * across, and what to call them in the report. Simple SEO's equivalents
+     * are per site, not per field, so a field placed in several sections has
+     * no single answer — these are surfaced instead of guessed.
+     * `hideSocial` is deliberately absent: it maps exactly onto the field's
+     * own subfield list, so it is carried rather than reported.
+     */
+    private const ETHER_FIELD_SETTING_LABELS = [
+        'title' => 'title tokens',
+        'titleSuffix' => 'title suffix',
+        'suffixAsPrefix' => 'suffix-as-prefix',
+        'description' => 'default description',
+        'socialImage' => 'default social image',
+        'robots' => 'default robots for new elements',
+    ];
+
     // Public Methods
     // =========================================================================
 
@@ -89,15 +111,33 @@ class EtherMigrationService extends Component
     {
         $report = new EtherMigrationReport(['applied' => $apply]);
 
+        // Read ether's settings FIRST: its site-wide robots rule decides what
+        // a value carrying no robots of its own was actually serving, which
+        // only _transformValue() is in a position to notice.
+        $etherSettings = Craft::$app->getProjectConfig()->get('plugins.seo.settings');
+        if (is_array($etherSettings) && $etherSettings !== []) {
+            $report->etherSettings = $etherSettings;
+            $report->etherSiteWideRobots = SeoData::canonicalizeDirectives(
+                $this->_directiveList($etherSettings['robots'] ?? []),
+            );
+            // noindex and nofollow are toggles here, not directives, so they
+            // survive canonicalizeDirectives() only if re-added.
+            foreach (['noindex', 'nofollow'] as $toggle) {
+                if (in_array($toggle, $this->_directiveList($etherSettings['robots'] ?? []), true)) {
+                    array_unshift($report->etherSiteWideRobots, $toggle);
+                }
+            }
+        }
+
         // Every column saveField() rewrites has to be read back and carried
         // over: createFieldConfig() writes the whole field config, so anything
         // left off the new instance is reset to the PHP default.
-        /** @var array<int, array{id: string|int, uid: string, handle: string, name: string, context: string|null, columnSuffix: string|null, instructions: string|null, searchable: bool|int|string, translationMethod: string, translationKeyFormat: string|null}> $fieldRows */
+        /** @var array<int, array{id: string|int, uid: string, handle: string, name: string, context: string|null, columnSuffix: string|null, instructions: string|null, searchable: bool|int|string, translationMethod: string, translationKeyFormat: string|null, settings: string|null}> $fieldRows */
         $fieldRows = (new Query())
             ->select([
                 'id', 'uid', 'handle', 'name', 'context',
                 'columnSuffix', 'instructions', 'searchable',
-                'translationMethod', 'translationKeyFormat',
+                'translationMethod', 'translationKeyFormat', 'settings',
             ])
             ->from(Table::FIELDS)
             ->where(['type' => self::ETHER_FIELD_TYPE])
@@ -116,6 +156,21 @@ class EtherMigrationService extends Component
                 'layoutElements' => count($layoutElementUids),
             ];
 
+            // Ether's per-field settings live in the same row. Read them for
+            // EVERY run: a dry run that hides a loss until you apply is not a
+            // dry run.
+            $etherFieldSettings = Json::decodeIfJson((string)$fieldRow['settings']);
+            $etherFieldSettings = is_array($etherFieldSettings) ? $etherFieldSettings : [];
+            $dropped = [];
+            foreach (self::ETHER_FIELD_SETTING_LABELS as $key => $label) {
+                if (!empty($etherFieldSettings[$key])) {
+                    $dropped[] = $label;
+                }
+            }
+            if ($dropped !== []) {
+                $report->droppedFieldSettings[(string)$fieldRow['handle']] = $dropped;
+            }
+
             // Convert the field before its content. A failure here then leaves
             // the values ether-shaped, which _looksLikeEther() still recognises
             // on a re-run; the other order would strand Simple-SEO-shaped
@@ -133,6 +188,15 @@ class EtherMigrationService extends Component
                 $field->translationKeyFormat = $fieldRow['translationKeyFormat'] !== null
                     ? (string)$fieldRow['translationKeyFormat']
                     : null;
+
+                // hideSocial maps exactly onto our own subfield list, so it
+                // is the one ether field setting that carries over.
+                if (!empty($etherFieldSettings['hideSocial'])) {
+                    $field->enabledSubfields = array_values(array_filter(
+                        $field->enabledSubfields,
+                        static fn(string $key): bool => $key !== 'socialImage',
+                    ));
+                }
 
                 // Straight out of a foreign plugin's table, so check it against
                 // the set Craft accepts rather than trusting the column; an
@@ -162,9 +226,9 @@ class EtherMigrationService extends Component
 
         $this->_migrateRedirects($apply, $redirectsCsvPath, $report);
 
-        $etherSettings = Craft::$app->getProjectConfig()->get('plugins.seo.settings');
-        if (is_array($etherSettings) && $etherSettings !== []) {
-            $report->etherSettings = $etherSettings;
+        $this->_reportSitemap($report);
+
+        if ($report->etherSettings !== null) {
             $report->notes[] = 'Ether plugin settings found (printed above): ether title templates have no clean equivalent, so nothing was guessed — review the Simple SEO settings screen and set per-site title formats deliberately.';
         }
 
@@ -178,6 +242,35 @@ class EtherMigrationService extends Component
 
         if ($report->droppedDirectives > 0) {
             $report->notes[] = "Dropped $report->droppedDirectives robots directive(s) Simple SEO does not render: a directive a crawler ignores only looks like it works.";
+        }
+
+        if ($report->droppedFieldSettings !== []) {
+            foreach ($report->droppedFieldSettings as $handle => $settings) {
+                $report->notes[] = sprintf(
+                    "Field '%s' had ether field-level default(s) that do not carry over: %s. Simple SEO's defaults are per site, not per field — set them under Settings → Sites if you still want them.",
+                    $handle,
+                    implode(', ', $settings),
+                );
+            }
+        }
+
+        // The loudest note in the report, and the only one describing a change
+        // to what crawlers see on pages nobody edited.
+        if ($report->etherSiteWideRobots !== [] && $report->inheritedSiteWideRobots > 0) {
+            $directives = implode(', ', $report->etherSiteWideRobots);
+            $note = sprintf(
+                'WARNING — ether served `%s` SITE-WIDE: it applies its settings-screen robots to every element that sets none of its own, and %d migrated value(s) were relying on that. Those pages now render no robots tag at all.',
+                $directives,
+                $report->inheritedSiteWideRobots,
+            );
+            $note .= in_array('noindex', $report->etherSiteWideRobots, true)
+                // Deliberately not automatic: a plugin that can de-index a
+                // whole site from a settings screen is the bug ether is best
+                // known for (ethercreative/seo#244), so this stays a decision
+                // someone makes in a config file, not one a migration makes.
+                ? ' If hiding the whole site was deliberate (a staging environment, say), set `siteWideNoindex` in config/simple-seo.php — env-gate it. If only some pages needed it, set robots on those entries.'
+                : ' Set the directives you still want on the entries that need them.';
+            $report->notes[] = $note;
         }
 
         // Content rows were rewritten with raw SQL, so no element-save event
@@ -274,6 +367,28 @@ class EtherMigrationService extends Component
     }
 
     /**
+     * Normalises any shape ether stores robots in to a clean list.
+     *
+     * Ether's own UI writes a list, but a hand-edited or older row can hold
+     * the directives as one comma-separated string, and switched-off
+     * directives leave gaps in its array, which stores as a JSON object keyed
+     * by the surviving indexes. Reading only the list shape would silently
+     * turn a hidden page back into an indexable one.
+     *
+     * @return string[]
+     */
+    private function _directiveList(mixed $raw): array
+    {
+        $list = match (true) {
+            is_array($raw) => array_map('strval', array_values($raw)),
+            is_string($raw) => array_map('trim', explode(',', $raw)),
+            default => [],
+        };
+
+        return array_values(array_filter($list, static fn(string $d): bool => $d !== ''));
+    }
+
+    /**
      * Whether a stored value carries ether's markers.
      *
      * @param array<array-key, mixed> $value
@@ -341,19 +456,16 @@ class EtherMigrationService extends Component
         // A second, different image is dropped rather than silently preferred.
         $report->droppedSocialFields += count(array_unique($networkImages)) > 1 ? 1 : 0;
 
-        $robotsRaw = $old['advanced']['robots'] ?? [];
-        // Ether's own UI writes a list, but a hand-edited or older row can
-        // hold the directives as one string. Reading only the list shape
-        // would silently turn a hidden page back into an indexable one.
-        // Switched-off directives leave gaps in ether's array, which stores as
-        // a JSON object keyed by the surviving indexes — array_values() flattens
-        // both that and the plain list back to the same thing.
-        $robots = match (true) {
-            is_array($robotsRaw) => array_map('strval', array_values($robotsRaw)),
-            is_string($robotsRaw) => array_map('trim', explode(',', $robotsRaw)),
-            default => [],
-        };
-        $robots = array_values(array_filter($robots, static fn(string $d): bool => $d !== ''));
+        $robots = $this->_directiveList($old['advanced']['robots'] ?? []);
+
+        // Ether serves its site-wide robots setting for any element that sets
+        // none of its own, so an empty value here was NOT an un-directed page.
+        // Simple SEO has no settings-screen equivalent on purpose, so these
+        // lose their tag — counted here and warned about in _run().
+        if ($robots === [] && $report->etherSiteWideRobots !== []) {
+            $report->inheritedSiteWideRobots++;
+        }
+
         $noindex = in_array('noindex', $robots, true) || in_array('none', $robots, true);
         $nofollow = in_array('nofollow', $robots, true) || in_array('none', $robots, true);
 
@@ -402,6 +514,67 @@ class EtherMigrationService extends Component
             'canonical' => $canonical,
             'robotsDirectives' => $directives,
         ];
+    }
+
+    /**
+     * Reports ether's sitemap table. Nothing is imported: ether configures
+     * sitemaps globally, keyed by section/group ID, while Simple SEO does it
+     * per site, keyed by UID, and only for sections — so ether's category,
+     * product-type and custom-URL rows have nowhere to land, and its blanket
+     * 0.5 priorities would stamp a `<priority>` on every URL that Simple SEO
+     * deliberately omits. The sources ether had switched OFF are named,
+     * because those are the ones whose absence changes the output: this
+     * plugin includes every section with URLs until told otherwise.
+     */
+    private function _reportSitemap(EtherMigrationReport $report): void
+    {
+        if (!Craft::$app->getDb()->tableExists(self::ETHER_SITEMAP_TABLE)) {
+            return;
+        }
+
+        /** @var array<int, array{group: string, url: string, enabled: bool|int|string}> $rows */
+        $rows = (new Query())->select(['group', 'url', 'enabled'])->from(self::ETHER_SITEMAP_TABLE)->all();
+        $report->sitemapRowsFound = count($rows);
+        if ($rows === []) {
+            return;
+        }
+
+        foreach ($rows as $row) {
+            if ((bool)$row['enabled']) {
+                continue;
+            }
+            $report->sitemapDisabledSources[] = $this->_sitemapSourceName(
+                (string)$row['group'],
+                (string)$row['url'],
+            );
+        }
+
+        $note = "Found $report->sitemapRowsFound ether sitemap row(s). Nothing was imported: Simple SEO configures its sitemap per site under Settings → Sitemap, and claims no `<priority>` unless you set one.";
+        if ($report->sitemapDisabledSources !== []) {
+            $note .= ' Ether had these switched OFF, and Simple SEO includes every section with URLs until told otherwise — re-exclude them if they should stay out: '
+                . implode(', ', $report->sitemapDisabledSources) . '.';
+        }
+        $report->notes[] = $note;
+    }
+
+    /**
+     * Names one ether sitemap source. Ether stores the section/group/type ID
+     * in its `url` column (a real URL only for custom URLs), so an unresolved
+     * ID is reported as-is rather than dropped.
+     */
+    private function _sitemapSourceName(string $group, string $url): string
+    {
+        if ($group === 'customUrls') {
+            return "custom URL $url";
+        }
+
+        $name = match ($group) {
+            'sections' => Craft::$app->getEntries()->getSectionById((int)$url)?->name,
+            'categories' => Craft::$app->getCategories()->getGroupById((int)$url)?->name,
+            default => null,
+        };
+
+        return $name !== null ? "$group: $name" : "$group: #$url";
     }
 
     /**

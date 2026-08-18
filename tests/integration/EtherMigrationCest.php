@@ -5,6 +5,7 @@ namespace anvildev\simpleseo\tests\integration;
 use anvildev\simpleseo\fields\data\SeoData;
 use anvildev\simpleseo\fields\SeoField;
 use anvildev\simpleseo\helpers\SeoFieldReader;
+use anvildev\simpleseo\models\EtherMigrationReport;
 use anvildev\simpleseo\Plugin;
 use anvildev\simpleseo\services\EtherMigrationService;
 use Craft;
@@ -382,8 +383,161 @@ class EtherMigrationCest
         $I->assertSame('Never converted', $this->_value($install, 'Broken')->title);
     }
 
+    /**
+     * Ether's SETTINGS-SCREEN robots are a live indexing rule: it serves them
+     * for every element that sets none of its own. Simple SEO has no
+     * settings-screen equivalent on purpose, so those pages come out with no
+     * robots tag — which has to be counted and warned about, never silent.
+     */
+    public function warnsAboutEtherSiteWideRobots(IntegrationTester $I): void
+    {
+        $projectConfig = Craft::$app->getProjectConfig();
+        $projectConfig->set('plugins.seo.settings', [
+            'robots' => ['noindex', 'noarchive', ''],
+            'sitemapName' => 'sitemap',
+        ]);
+
+        try {
+            $install = $this->_install($I, 'SiteWide', [
+                // No robots of its own: ether was serving the site-wide rule.
+                'Inherits' => ['titleRaw' => 'Inherits the site-wide rule'],
+                // Its own robots, so the site-wide rule never applied.
+                'Own' => ['advanced' => ['robots' => ['nofollow']]],
+            ]);
+
+            $report = Plugin::getInstance()->getEtherMigration()->apply($this->_csvPath());
+
+            $I->assertSame(['noindex', 'noarchive'], $report->etherSiteWideRobots, 'blank entries are not directives');
+            $I->assertSame(1, $report->inheritedSiteWideRobots, 'only the value with no robots of its own');
+
+            $warning = $this->_note($report, 'SITE-WIDE');
+            $I->assertNotNull($warning, 'the run warns about it');
+            $I->assertStringContainsString('noindex, noarchive', $warning);
+            $I->assertStringContainsString('siteWideNoindex', $warning, 'points at the one deliberate escape hatch');
+
+            // The migration must NOT apply it itself: a settings screen that
+            // can de-index a whole site is the bug ether is known for.
+            Craft::$app->getFields()->refreshFields();
+            $I->assertFalse($this->_value($install, 'Inherits')->noindex);
+            $I->assertTrue($this->_value($install, 'Own')->nofollow);
+        } finally {
+            $projectConfig->remove('plugins.seo.settings');
+        }
+    }
+
+    /**
+     * Ether's per-field defaults have no per-field equivalent here, so they
+     * are reported — except hideSocial, which maps exactly onto the field's
+     * own subfield list and is carried instead.
+     */
+    public function carriesHideSocialAndReportsTheOtherFieldSettings(IntegrationTester $I): void
+    {
+        $install = $this->_install($I, 'FieldSettings', ['Any' => ['titleRaw' => 'Any']]);
+
+        Db::update(Table::FIELDS, [
+            'settings' => Json::encode([
+                'hideSocial' => true,
+                'description' => 'Field-level default description.',
+                'socialImage' => ['4242'],
+                'robots' => ['noindex'],
+                'title' => [['key' => '1', 'locked' => '0', 'template' => '{title}']],
+                // Left empty on purpose: an unset setting is not "dropped".
+                'titleSuffix' => null,
+                'suffixAsPrefix' => false,
+            ]),
+        ], ['id' => $install['field']->id]);
+        Craft::$app->getFields()->refreshFields();
+
+        // The DRY run has to name them too — a warning you only see after
+        // applying is not a warning.
+        $dry = Plugin::getInstance()->getEtherMigration()->analyze();
+        $I->assertNotEmpty($dry->droppedFieldSettings[$install['handle']] ?? [], 'reported before anything is written');
+
+        $report = Plugin::getInstance()->getEtherMigration()->apply($this->_csvPath());
+        $I->assertSame([], $report->failures);
+
+        $dropped = $report->droppedFieldSettings[$install['handle']] ?? [];
+        $I->assertContains('default description', $dropped);
+        $I->assertContains('default social image', $dropped);
+        $I->assertContains('default robots for new elements', $dropped);
+        $I->assertContains('title tokens', $dropped);
+        $I->assertNotContains('title suffix', $dropped, 'a setting ether never had is not a loss');
+        $I->assertNotNull($this->_note($report, 'do not carry over'));
+
+        // hideSocial DOES carry: the social control stays off the field.
+        Craft::$app->getFields()->refreshFields();
+        $field = Craft::$app->getFields()->getFieldByHandle($install['handle']);
+        $I->assertInstanceOf(SeoField::class, $field);
+        $I->assertNotContains('socialImage', $field->enabledSubfields);
+        $I->assertContains('title', $field->enabledSubfields, 'the other controls are untouched');
+    }
+
+    /**
+     * Ether's sitemap table is reported, not imported — and the sources it had
+     * switched OFF are named, because Simple SEO includes every section with
+     * URLs until told otherwise.
+     */
+    public function reportsEtherSitemapRowsWithoutImportingThem(IntegrationTester $I): void
+    {
+        $install = $this->_install($I, 'Sitemap2', ['Any' => ['titleRaw' => 'Any']], null, 'ether-sitemap2/{slug}');
+        $section = Craft::$app->getEntries()->getSectionByHandle($install['sectionHandle']);
+
+        $db = Craft::$app->getDb();
+        if (!$db->tableExists(EtherMigrationService::ETHER_SITEMAP_TABLE)) {
+            $db->createCommand()->createTable(EtherMigrationService::ETHER_SITEMAP_TABLE, [
+                'id' => 'pk',
+                'group' => 'string',
+                'url' => 'string',
+                'frequency' => 'string',
+                'priority' => 'float',
+                'enabled' => 'boolean',
+            ])->execute();
+        }
+        $db->createCommand()->delete(EtherMigrationService::ETHER_SITEMAP_TABLE)->execute();
+        // Ether stores the section ID in `url`, not a handle.
+        $db->createCommand()->batchInsert(
+            EtherMigrationService::ETHER_SITEMAP_TABLE,
+            ['group', 'url', 'frequency', 'priority', 'enabled'],
+            [
+                ['sections', (string)$section->id, 'weekly', 0.5, false],
+                ['sections', '999999', 'weekly', 0.5, false],
+                ['customUrls', 'https://example.com/custom', 'monthly', 0.2, true],
+            ],
+        )->execute();
+
+        $report = Plugin::getInstance()->getEtherMigration()->apply($this->_csvPath());
+
+        $I->assertSame(3, $report->sitemapRowsFound);
+        $I->assertContains("sections: {$section->name}", $report->sitemapDisabledSources, 'the ID resolves to a name');
+        $I->assertContains('sections: #999999', $report->sitemapDisabledSources, 'an ID that no longer resolves is still reported');
+        $I->assertCount(2, $report->sitemapDisabledSources, 'an enabled source needs no action');
+
+        $note = $this->_note($report, 'ether sitemap row');
+        $I->assertNotNull($note);
+        $I->assertStringContainsString('re-exclude', $note);
+
+        // Nothing was imported: the section is still in the sitemap.
+        $settings = Plugin::getInstance()->getSettings();
+        $I->assertSame([], $settings->sitemapExcludedSections);
+        $I->assertSame([], $settings->sitemapPriorities);
+    }
+
     // Private Methods
     // =========================================================================
+
+    /**
+     * The first report note containing $needle, or null.
+     */
+    private function _note(EtherMigrationReport $report, string $needle): ?string
+    {
+        foreach ($report->notes as $note) {
+            if (str_contains($note, $needle)) {
+                return $note;
+            }
+        }
+
+        return null;
+    }
 
     /**
      * Builds a pre-migration DB state: a field whose stored type is ether's
