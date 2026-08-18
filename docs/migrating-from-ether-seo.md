@@ -13,6 +13,9 @@ If your site runs [ether/seo](https://plugins.craftcms.com/seo) — the free "SE
 | Sitemap | Zero-config sitemap with a [diagnosis view](sitemap.md) — never silently empty |
 | Redirects | Exported as a **Retour-importable CSV** — redirects belong in [Retour](https://plugins.craftcms.com/retour) |
 | Focus keywords / score | **Dropped, and counted in the report.** Content analysis is the most fragile part of every SEO plugin; we don't do it. |
+| Site-wide robots (plugin settings) | **Not carried, and warned about loudly.** Ether applies its settings-screen robots to every element that sets none of its own, so pages you never edited were being noindexed by it. Simple SEO will not de-index a site from a settings screen — see below. |
+| Per-field defaults (title tokens, description, social image, robots) | **Not carried, and named per field in the report.** Simple SEO's defaults are per site, not per field. `hideSocial` is the exception: it maps onto the field's own controls and carries. |
+| Sitemap config | **Not imported, and reported.** Ether configures sitemaps globally; Simple SEO does it per site under Settings → Sitemap. Sources ether had switched OFF are named, so you can re-exclude them. |
 
 ## The migration
 
@@ -50,6 +53,16 @@ Each ether SEO field is converted **in place** — same field ID, UID, and handl
 php craft plugin/uninstall seo
 composer remove ether/seo
 ```
+
+## The site-wide robots warning
+
+If the dry run prints a `WARNING — ether served ... SITE-WIDE` line, read it before you apply. Ether's settings screen has a robots control, and it applies to **every** element whose own robots is empty — so a site that looks clean entry-by-entry can be entirely noindexed by one setting. Sites have been de-indexed by exactly this ([ethercreative/seo#244](https://github.com/ethercreative/seo/issues/244)), which is why Simple SEO has no equivalent control and why the migration will not turn one on for you.
+
+Decide deliberately:
+
+- **The whole environment should be hidden** (staging, a pre-launch site): set `siteWideNoindex` in `config/simple-seo.php`, env-gated. It is a real lockdown — `X-Robots-Tag` on every response, forced meta, and a robots.txt that disallows everything — and there is no CP control that can poke a hole in it.
+- **Only some pages should be hidden**: set robots on those entries. The report tells you how many values were relying on the site-wide rule.
+- **It was never intended**: do nothing. Those pages are now indexable, which is what you wanted.
 
 ## After migrating
 

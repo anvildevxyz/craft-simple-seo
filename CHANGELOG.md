@@ -1,5 +1,19 @@
 # Release Notes for Simple SEO
 
+## Unreleased
+
+Three more ether/seo migration gaps, found by running the migration against ether's complete data surface — its settings, its per-field defaults, and its sitemap table, not just its field values. No schema change.
+
+### Added
+
+- **The migration warns when ether was serving a site-wide robots rule.** Ether applies its settings-screen robots to every element that sets none of its own, so pages nobody ever edited were being noindexed by it — and after migrating they rendered no robots tag at all, silently. The report now names the directives, counts the values that were relying on them, and points at `siteWideNoindex` in `config/simple-seo.php`. It deliberately does **not** apply the rule for you: a plugin that can de-index a whole site from a settings screen is the bug ether is best known for ([ethercreative/seo#244](https://github.com/ethercreative/seo/issues/244))
+- Ether's per-field defaults (title tokens, title suffix, default description, default social image, default robots) are named per field in the report instead of vanishing with the field conversion. Simple SEO's equivalents are per site, so there is nothing to map them onto
+- Ether's sitemap rows are reported, with the sources it had switched OFF resolved to their names — Simple SEO includes every section with URLs until told otherwise, so those need re-excluding under Settings → Sitemap
+
+### Changed
+
+- A field's `hideSocial` setting now carries across: the social image control stays off that field, instead of reappearing after the migration
+
 ## 1.0.3 - 2026-08-18
 
 One more ether/seo migration fix, found by running the migration against a real ether install. No schema change — updating is a straight `composer update`. **If you have already migrated from ether/seo, re-run `craft simple-seo/migrate/ether --apply` after updating**; the run is idempotent and recovers the directives it skipped.
