@@ -13,9 +13,9 @@ If your site runs [ether/seo](https://plugins.craftcms.com/seo) — the free "SE
 | Sitemap | Zero-config sitemap with a [diagnosis view](sitemap.md) — never silently empty |
 | Redirects | Exported as a **Retour-importable CSV** — redirects belong in [Retour](https://plugins.craftcms.com/retour) |
 | Focus keywords / score | **Dropped, and counted in the report.** Content analysis is the most fragile part of every SEO plugin; we don't do it. |
-| Site-wide robots (plugin settings) | **Not carried, and warned about loudly.** Ether applies its settings-screen robots to every element that sets none of its own, so pages you never edited were being noindexed by it. Simple SEO will not de-index a site from a settings screen — see below. |
+| Site-wide robots (plugin settings) | **Warned about loudly; carried only if you ask.** Ether applies its settings-screen robots to every element that sets none of its own, so pages you never edited were being noindexed by it. `--carry-settings` writes those directives onto the entries that had them — see below. |
 | Per-field defaults (title tokens, description, social image, robots) | **Not carried, and named per field in the report.** Simple SEO's defaults are per site, not per field. `hideSocial` is the exception: it maps onto the field's own controls and carries. |
-| Sitemap config | **Not imported, and reported.** Ether configures sitemaps globally; Simple SEO does it per site under Settings → Sitemap. Sources ether had switched OFF are named, so you can re-exclude them. |
+| Sitemap config | **Reported; switched-off sections carried only if you ask.** Ether configures sitemaps globally; Simple SEO does it per site under Settings → Sitemap. `--carry-settings` excludes ether's switched-off sections on every site. Priorities are never imported: a section with no priority set emits no `<priority>` here, on purpose. |
 
 ## The migration
 
@@ -60,9 +60,17 @@ If the dry run prints a `WARNING — ether served ... SITE-WIDE` line, read it b
 
 Decide deliberately:
 
+- **Those pages really should keep their directives**: re-run with `--carry-settings`, which writes ether's directives onto each entry that was relying on them:
+
+  ```bash
+  php craft simple-seo/migrate/ether --apply --carry-settings
+  ```
+
+  Every one becomes a normal per-entry value — visible in the CP, editable, removable. Nothing is hidden in a setting. The flag also carries ether's switched-off sitemap sections across as per-site exclusions. Run it without `--apply` first to see the counts.
 - **The whole environment should be hidden** (staging, a pre-launch site): set `siteWideNoindex` in `config/simple-seo.php`, env-gated. It is a real lockdown — `X-Robots-Tag` on every response, forced meta, and a robots.txt that disallows everything — and there is no CP control that can poke a hole in it.
-- **Only some pages should be hidden**: set robots on those entries. The report tells you how many values were relying on the site-wide rule.
 - **It was never intended**: do nothing. Those pages are now indexable, which is what you wanted.
+
+`--carry-settings` is never implied by `--apply`. Stamping `noindex` onto pages is not something a migration should decide for you, so it stays a separate, deliberate word on the command line.
 
 ## After migrating
 

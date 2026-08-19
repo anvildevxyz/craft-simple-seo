@@ -23,6 +23,14 @@ class EtherMigrationReport extends Model
     public bool $applied = false;
 
     /**
+     * @var bool Whether this run carried across the ether settings that have
+     * a faithful equivalent here. Off by default: the migration reports those
+     * settings rather than acting on them, because the one that matters most
+     * de-indexes pages.
+     */
+    public bool $carrySettings = false;
+
+    /**
      * @var array<int, array{handle: string, name: string, uid: string, layoutElements: int}>
      * The ether SEO fields found.
      */
@@ -113,6 +121,19 @@ class EtherMigrationReport extends Model
      * robots tag after the migration.
      */
     public int $inheritedSiteWideRobots = 0;
+
+    /**
+     * @var int Values that were given ether's site-wide directives because
+     * {@see self::$carrySettings} was on. Without it these are only counted,
+     * in {@see self::$inheritedSiteWideRobots}.
+     */
+    public int $carriedSiteWideRobots = 0;
+
+    /**
+     * @var int Sections excluded from the sitemap, per site, because ether had
+     * them switched off and {@see self::$carrySettings} was on.
+     */
+    public int $carriedSitemapExclusions = 0;
 
     /**
      * @var array<string, string[]> Ether FIELD-level settings that do not

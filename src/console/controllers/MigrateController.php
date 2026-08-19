@@ -33,6 +33,14 @@ class MigrateController extends Controller
      */
     public ?string $csv = null;
 
+    /**
+     * @var bool Also carry the ether SETTINGS that have a faithful equivalent
+     * here: its site-wide robots rule, and its switched-off sitemap sections.
+     * Never implied by --apply — the robots rule de-indexes pages, so opting
+     * in is how you say it was deliberate.
+     */
+    public bool $carrySettings = false;
+
     // Public Methods
     // =========================================================================
 
@@ -41,7 +49,7 @@ class MigrateController extends Controller
      */
     public function options($actionID): array
     {
-        return array_merge(parent::options($actionID), ['apply', 'csv']);
+        return array_merge(parent::options($actionID), ['apply', 'csv', 'carrySettings']);
     }
 
     /**
@@ -51,7 +59,9 @@ class MigrateController extends Controller
     public function actionEther(): int
     {
         $service = Plugin::getInstance()->getEtherMigration();
-        $report = $this->apply ? $service->apply($this->csv) : $service->analyze();
+        $report = $this->apply
+            ? $service->apply($this->csv, $this->carrySettings)
+            : $service->analyze($this->carrySettings);
 
         $this->stdout($this->apply ? "Ether SEO migration — APPLIED\n\n" : "Ether SEO migration — DRY RUN (nothing written)\n\n");
 
@@ -75,6 +85,16 @@ class MigrateController extends Controller
 
         if (!$this->apply) {
             $this->stdout("\nDry run only. Re-run with --apply to migrate.\n");
+        }
+
+        if ($report->carriedSiteWideRobots > 0 || $report->carriedSitemapExclusions > 0) {
+            $this->stdout(sprintf(
+                "\n--carry-settings: %d value(s) %s ether's site-wide robots, %d sitemap exclusion(s) %s.\n",
+                $report->carriedSiteWideRobots,
+                $report->applied ? 'given' : 'would be given',
+                $report->carriedSitemapExclusions,
+                $report->applied ? 'carried' : 'would be carried',
+            ));
         }
 
         if ($report->failures !== []) {
@@ -116,7 +136,15 @@ class MigrateController extends Controller
         }
 
         if ($report->sitemapRowsFound > 0) {
-            $lines[] = sprintf('%d ether sitemap row(s) found — none imported', $report->sitemapRowsFound);
+            $lines[] = sprintf(
+                '%d ether sitemap row(s) found — %s',
+                $report->sitemapRowsFound,
+                match (true) {
+                    $report->carriedSitemapExclusions === 0 => 'none imported',
+                    $report->applied => "$report->carriedSitemapExclusions exclusion(s) carried",
+                    default => "$report->carriedSitemapExclusions exclusion(s) would be carried",
+                },
+            );
         }
 
         $lines[] = sprintf(
