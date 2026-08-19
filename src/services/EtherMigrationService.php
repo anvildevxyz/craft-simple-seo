@@ -79,10 +79,12 @@ class EtherMigrationService extends Component
 
     /**
      * Dry run: reports everything a migration would do, writes nothing.
+     *
+     * @param bool $carrySettings See {@see self::apply()}.
      */
-    public function analyze(): EtherMigrationReport
+    public function analyze(bool $carrySettings = false): EtherMigrationReport
     {
-        return $this->_run(false, null);
+        return $this->_run(false, null, $carrySettings);
     }
 
     /**
@@ -90,12 +92,18 @@ class EtherMigrationService extends Component
      *
      * @param string|null $redirectsCsvPath Target CSV path; defaults to
      * storage/simple-seo/ether-redirects.csv
+     * @param bool $carrySettings Also carry the ether SETTINGS that have a
+     * faithful equivalent here: its site-wide robots rule, written onto each
+     * element that was relying on it, and its switched-off sitemap sections,
+     * written as per-site exclusions. Off by default and never implied by
+     * --apply, because the first of those de-indexes pages: opting in is how
+     * an operator says the site-wide rule was deliberate.
      * @throws \yii\db\Exception
      * @throws \yii\base\ErrorException
      */
-    public function apply(?string $redirectsCsvPath = null): EtherMigrationReport
+    public function apply(?string $redirectsCsvPath = null, bool $carrySettings = false): EtherMigrationReport
     {
-        return $this->_run(true, $redirectsCsvPath);
+        return $this->_run(true, $redirectsCsvPath, $carrySettings);
     }
 
     // Private Methods
@@ -107,9 +115,9 @@ class EtherMigrationService extends Component
      * @throws \yii\db\Exception
      * @throws \yii\base\ErrorException
      */
-    private function _run(bool $apply, ?string $redirectsCsvPath): EtherMigrationReport
+    private function _run(bool $apply, ?string $redirectsCsvPath, bool $carrySettings): EtherMigrationReport
     {
-        $report = new EtherMigrationReport(['applied' => $apply]);
+        $report = new EtherMigrationReport(['applied' => $apply, 'carrySettings' => $carrySettings]);
 
         // Read ether's settings FIRST: its site-wide robots rule decides what
         // a value carrying no robots of its own was actually serving, which
@@ -226,7 +234,7 @@ class EtherMigrationService extends Component
 
         $this->_migrateRedirects($apply, $redirectsCsvPath, $report);
 
-        $this->_reportSitemap($report);
+        $this->_reportSitemap($apply, $report);
 
         if ($report->etherSettings !== null) {
             $report->notes[] = 'Ether plugin settings found (printed above): ether title templates have no clean equivalent, so nothing was guessed — review the Simple SEO settings screen and set per-site title formats deliberately.';
@@ -258,19 +266,32 @@ class EtherMigrationService extends Component
         // to what crawlers see on pages nobody edited.
         if ($report->etherSiteWideRobots !== [] && $report->inheritedSiteWideRobots > 0) {
             $directives = implode(', ', $report->etherSiteWideRobots);
-            $note = sprintf(
-                'WARNING — ether served `%s` SITE-WIDE: it applies its settings-screen robots to every element that sets none of its own, and %d migrated value(s) were relying on that. Those pages now render no robots tag at all.',
-                $directives,
-                $report->inheritedSiteWideRobots,
-            );
-            $note .= in_array('noindex', $report->etherSiteWideRobots, true)
+
+            if ($report->carriedSiteWideRobots > 0) {
+                // Carried: say so plainly, because the run has just written a
+                // directive onto pages nobody edited.
+                $report->notes[] = sprintf(
+                    'Ether served `%s` SITE-WIDE, and --carry-settings %s it onto the %d value(s) relying on it, so those pages keep the directives they had. Each becomes a normal per-entry value, editable and removable in the CP.',
+                    $directives,
+                    $report->applied ? 'wrote' : 'would write',
+                    $report->carriedSiteWideRobots,
+                );
+            } else {
+                $note = sprintf(
+                    'WARNING — ether served `%s` SITE-WIDE: it applies its settings-screen robots to every element that sets none of its own, and %d migrated value(s) were relying on that. Those pages now render no robots tag at all.',
+                    $directives,
+                    $report->inheritedSiteWideRobots,
+                );
                 // Deliberately not automatic: a plugin that can de-index a
                 // whole site from a settings screen is the bug ether is best
                 // known for (ethercreative/seo#244), so this stays a decision
-                // someone makes in a config file, not one a migration makes.
-                ? ' If hiding the whole site was deliberate (a staging environment, say), set `siteWideNoindex` in config/simple-seo.php — env-gate it. If only some pages needed it, set robots on those entries.'
-                : ' Set the directives you still want on the entries that need them.';
-            $report->notes[] = $note;
+                // someone makes, not one a migration makes for them.
+                $note .= ' Re-run with --carry-settings to write those directives onto the entries that had them.';
+                $note .= in_array('noindex', $report->etherSiteWideRobots, true)
+                    ? ' If instead the whole environment should be hidden (staging, say), set `siteWideNoindex` in config/simple-seo.php — env-gate it.'
+                    : '';
+                $report->notes[] = $note;
+            }
         }
 
         // Content rows were rewritten with raw SQL, so no element-save event
@@ -464,6 +485,13 @@ class EtherMigrationService extends Component
         // lose their tag — counted here and warned about in _run().
         if ($robots === [] && $report->etherSiteWideRobots !== []) {
             $report->inheritedSiteWideRobots++;
+
+            // Opted in: give the element the directives ether was serving it,
+            // so the page keeps behaving exactly as it did.
+            if ($report->carrySettings) {
+                $robots = $report->etherSiteWideRobots;
+                $report->carriedSiteWideRobots++;
+            }
         }
 
         $noindex = in_array('noindex', $robots, true) || in_array('none', $robots, true);
@@ -526,7 +554,7 @@ class EtherMigrationService extends Component
      * because those are the ones whose absence changes the output: this
      * plugin includes every section with URLs until told otherwise.
      */
-    private function _reportSitemap(EtherMigrationReport $report): void
+    private function _reportSitemap(bool $apply, EtherMigrationReport $report): void
     {
         if (!Craft::$app->getDb()->tableExists(self::ETHER_SITEMAP_TABLE)) {
             return;
@@ -539,22 +567,83 @@ class EtherMigrationService extends Component
             return;
         }
 
+        $disabledSectionUids = [];
         foreach ($rows as $row) {
             if ((bool)$row['enabled']) {
                 continue;
             }
-            $report->sitemapDisabledSources[] = $this->_sitemapSourceName(
-                (string)$row['group'],
-                (string)$row['url'],
-            );
+            $group = (string)$row['group'];
+            $report->sitemapDisabledSources[] = $this->_sitemapSourceName($group, (string)$row['url']);
+
+            // Only sections have an equivalent: Simple SEO's sitemap covers
+            // sections, so ether's category, product-type and custom-URL rows
+            // stay reported-only even when carrying.
+            if ($group === 'sections') {
+                $uid = Craft::$app->getEntries()->getSectionById((int)$row['url'])?->uid;
+                if ($uid !== null) {
+                    $disabledSectionUids[] = $uid;
+                }
+            }
         }
 
-        $note = "Found $report->sitemapRowsFound ether sitemap row(s). Nothing was imported: Simple SEO configures its sitemap per site under Settings → Sitemap, and claims no `<priority>` unless you set one.";
+        if ($report->carrySettings && $disabledSectionUids !== []) {
+            $this->_carrySitemapExclusions($disabledSectionUids, $apply, $report);
+        }
+
+        $note = "Found $report->sitemapRowsFound ether sitemap row(s).";
+        $note .= $report->carriedSitemapExclusions > 0
+            ? " Simple SEO configures its sitemap per site under Settings → Sitemap; it claims no `<priority>` unless you set one, so ether's priorities were not imported."
+            : " Nothing was imported: Simple SEO configures its sitemap per site under Settings → Sitemap, and claims no `<priority>` unless you set one.";
+
         if ($report->sitemapDisabledSources !== []) {
-            $note .= ' Ether had these switched OFF, and Simple SEO includes every section with URLs until told otherwise — re-exclude them if they should stay out: '
-                . implode(', ', $report->sitemapDisabledSources) . '.';
+            $note .= $report->carriedSitemapExclusions > 0
+                ? sprintf(
+                    ' Ether had these switched OFF: %s. %d section exclusion(s) %s carried across, one per site; anything above that is not a section and has no equivalent here.',
+                    implode(', ', $report->sitemapDisabledSources),
+                    $report->carriedSitemapExclusions,
+                    $report->applied ? 'were' : 'would be',
+                )
+                : ' Ether had these switched OFF, and Simple SEO includes every section with URLs until told otherwise — re-exclude them if they should stay out (or re-run with --carry-settings): '
+                    . implode(', ', $report->sitemapDisabledSources) . '.';
         }
         $report->notes[] = $note;
+    }
+
+    /**
+     * Excludes ether's switched-off sections from every site's sitemap.
+     *
+     * Ether's sitemap config has no site dimension, so the only faithful
+     * reading of one global "off" is "off everywhere". Existing exclusions are
+     * merged, never replaced, and the whole settings payload is rebuilt —
+     * savePluginSettings() writes back exactly the keys it is handed, so a
+     * group left out would be deleted.
+     *
+     * @param string[] $sectionUids
+     */
+    private function _carrySitemapExclusions(array $sectionUids, bool $apply, EtherMigrationReport $report): void
+    {
+        $settings = Plugin::getInstance()->getSettings();
+        $excluded = $settings->sitemapExcludedSections;
+
+        foreach (Craft::$app->getSites()->getAllSites() as $site) {
+            $siteUid = (string)$site->uid;
+            $merged = array_values(array_unique([...($excluded[$siteUid] ?? []), ...$sectionUids]));
+            $report->carriedSitemapExclusions += count($merged) - count($excluded[$siteUid] ?? []);
+            $excluded[$siteUid] = $merged;
+        }
+
+        if (!$apply || $report->carriedSitemapExclusions === 0) {
+            return;
+        }
+
+        $plugin = Plugin::getInstance();
+        if (!Craft::$app->getPlugins()->savePluginSettings($plugin, $settings->projectConfigPayload([
+            'sitemapExcludedSections' => $excluded,
+        ]))) {
+            $failure = 'Could not save the carried sitemap exclusions: ' . Json::encode($settings->getErrors());
+            $report->notes[] = $failure;
+            $report->failures[] = $failure;
+        }
     }
 
     /**
