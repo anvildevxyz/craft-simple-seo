@@ -1,5 +1,11 @@
 # Release Notes for Simple SEO
 
+## Unreleased
+
+### Added
+
+- **`craft simple-seo/migrate/ether --apply --carry-settings`** carries the ether settings that have a faithful equivalent here, instead of only reporting them. Ether applies its settings-screen robots to every element that sets none of its own, so a migration could leave pages that ether kept out of the index rendering no robots tag at all; the flag writes those directives onto the entries that had them, as normal per-entry values you can see and edit in the CP. It also carries ether's switched-off sitemap sections across as per-site exclusions. Off unless you ask for it, and never implied by `--apply` — stamping `noindex` onto pages is not a decision a migration should make for you. Ether's sitemap priorities are still not imported: a section with no priority set emits no `<priority>` here, on purpose
+
 ## 1.0.4 - 2026-08-18
 
 Three more ether/seo migration gaps, found by running the migration against ether's complete data surface — its settings, its per-field defaults, and its sitemap table, not just its field values. No schema change.

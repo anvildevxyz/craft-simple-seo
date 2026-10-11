@@ -522,6 +522,119 @@ class EtherMigrationCest
         $I->assertSame([], $settings->sitemapPriorities);
     }
 
+    /**
+     * --carry-settings writes ether's site-wide rule onto the values that were
+     * relying on it, so those pages keep the directives they had. Opt-in only:
+     * the default run must leave them alone.
+     */
+    public function carrySettingsWritesEtherSiteWideRobotsOntoTheValues(IntegrationTester $I): void
+    {
+        $projectConfig = Craft::$app->getProjectConfig();
+        $projectConfig->set('plugins.seo.settings', ['robots' => ['noindex', 'noarchive']]);
+
+        try {
+            $install = $this->_install($I, 'Carry', [
+                'Inherits' => ['titleRaw' => 'Was relying on the site-wide rule'],
+                'Own' => ['advanced' => ['robots' => ['nofollow']]],
+            ]);
+
+            // The dry run reports what it WOULD carry, and writes nothing.
+            $dry = Plugin::getInstance()->getEtherMigration()->analyze(true);
+            $I->assertSame(1, $dry->carriedSiteWideRobots);
+            $I->assertSame(
+                EtherMigrationService::ETHER_FIELD_TYPE,
+                (new Query())->select('type')->from(Table::FIELDS)->where(['id' => $install['field']->id])->scalar(),
+            );
+
+            $report = Plugin::getInstance()->getEtherMigration()->apply($this->_csvPath(), true);
+            $I->assertSame([], $report->failures);
+            $I->assertTrue($report->carrySettings);
+            $I->assertSame(1, $report->carriedSiteWideRobots);
+            $I->assertSame(1, $report->inheritedSiteWideRobots, 'still counted, whether or not it is carried');
+
+            Craft::$app->getFields()->refreshFields();
+
+            // The whole point: the page renders what ether was rendering.
+            $inherits = $this->_value($install, 'Inherits');
+            $I->assertTrue($inherits->noindex, 'the toggle half of the rule');
+            $I->assertSame(['noarchive'], $inherits->robotsDirectives, 'and the directive half');
+            $I->assertSame('noindex, noarchive', $inherits->robots());
+
+            // A value with its own robots is never overwritten by the rule.
+            $own = $this->_value($install, 'Own');
+            $I->assertTrue($own->nofollow);
+            $I->assertFalse($own->noindex);
+            $I->assertSame([], $own->robotsDirectives);
+
+            // The note says it happened, and drops the WARNING framing.
+            $I->assertNotNull($this->_note($report, '--carry-settings wrote it onto'));
+            $I->assertNull($this->_note($report, 'WARNING'));
+        } finally {
+            $projectConfig->remove('plugins.seo.settings');
+        }
+    }
+
+    /**
+     * --carry-settings excludes ether's switched-off SECTIONS from every
+     * site's sitemap. Ether's config has no site dimension, so one global
+     * "off" can only mean "off everywhere"; its other groups have no
+     * equivalent and stay reported-only.
+     */
+    public function carrySettingsExcludesEtherSwitchedOffSections(IntegrationTester $I): void
+    {
+        $install = $this->_install($I, 'CarryMap', ['Any' => ['titleRaw' => 'Any']], null, 'ether-carrymap/{slug}');
+        $section = Craft::$app->getEntries()->getSectionByHandle($install['sectionHandle']);
+        $plugin = Plugin::getInstance();
+        $before = $plugin->getSettings()->sitemapExcludedSections;
+
+        $db = Craft::$app->getDb();
+        if (!$db->tableExists(EtherMigrationService::ETHER_SITEMAP_TABLE)) {
+            $db->createCommand()->createTable(EtherMigrationService::ETHER_SITEMAP_TABLE, [
+                'id' => 'pk',
+                'group' => 'string',
+                'url' => 'string',
+                'frequency' => 'string',
+                'priority' => 'float',
+                'enabled' => 'boolean',
+            ])->execute();
+        }
+        $db->createCommand()->delete(EtherMigrationService::ETHER_SITEMAP_TABLE)->execute();
+        $db->createCommand()->batchInsert(
+            EtherMigrationService::ETHER_SITEMAP_TABLE,
+            ['group', 'url', 'frequency', 'priority', 'enabled'],
+            [
+                ['sections', (string)$section->id, 'weekly', 0.5, false],
+                // Off, but not a section: nothing here can hold it.
+                ['categories', '424242', 'weekly', 0.5, false],
+                ['sections', (string)$section->id, 'weekly', 0.5, true],
+            ],
+        )->execute();
+
+        try {
+            $report = $plugin->getEtherMigration()->apply($this->_csvPath(), true);
+            $I->assertSame([], $report->failures);
+
+            $siteCount = count(Craft::$app->getSites()->getAllSites());
+            $I->assertSame($siteCount, $report->carriedSitemapExclusions, 'one exclusion per site');
+
+            $excluded = $plugin->getSettings()->sitemapExcludedSections;
+            foreach (Craft::$app->getSites()->getAllSites() as $site) {
+                $I->assertContains($section->uid, $excluded[$site->uid] ?? [], "site $site->handle");
+                $I->assertNotContains('424242', $excluded[$site->uid] ?? [], 'a category is not a section');
+            }
+
+            // Ether's priorities are NOT imported: a section with no entry
+            // emits no <priority> here, and that is deliberate.
+            $I->assertSame([], $plugin->getSettings()->sitemapPriorities);
+        } finally {
+            $db->createCommand()->delete(EtherMigrationService::ETHER_SITEMAP_TABLE)->execute();
+            Craft::$app->getPlugins()->savePluginSettings(
+                $plugin,
+                $plugin->getSettings()->projectConfigPayload(['sitemapExcludedSections' => $before]),
+            );
+        }
+    }
+
     // Private Methods
     // =========================================================================
 
