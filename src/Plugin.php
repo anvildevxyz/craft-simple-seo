@@ -248,11 +248,53 @@ class Plugin extends BasePlugin
     // =========================================================================
 
     /**
-     * Exposes the plugin's MCP tools when the stimmt/craft-mcp plugin is
+     * Exposes the plugin's MCP tools to Craft 5.12's built-in server and, when
+     * it is installed, to stimmt/craft-mcp. Both are soft dependencies.
+     */
+    private function _registerMcpTools(): void
+    {
+        $this->_registerCraftMcpTools();
+        $this->_registerStimmtMcpTools();
+    }
+
+    /**
+     * Registers the tool class with Craft's MCP server (5.12+). Absent on
+     * older Craft, so the class_exists() guard keeps those installs unchanged.
+     * Also appends a short note to the instructions Craft sends to clients.
+     */
+    private function _registerCraftMcpTools(): void
+    {
+        if (!class_exists(\craft\services\Mcp::class)) {
+            return;
+        }
+
+        Event::on(
+            \craft\services\Mcp::class,
+            \craft\services\Mcp::EVENT_REGISTER_CAPABILITY_TYPES,
+            static function(RegisterComponentTypesEvent $event): void {
+                $event->types[] = \anvildev\simpleseo\mcp\SeoTools::class;
+            },
+        );
+
+        if (!class_exists(\craft\mcp\AdminInstructions::class)) {
+            return;
+        }
+
+        Event::on(
+            \craft\mcp\AdminInstructions::class,
+            \craft\mcp\AdminInstructions::EVENT_COLLECT_INSTRUCTIONS,
+            static function(\craft\mcp\events\CollectingAdminInstructions $event): void {
+                $event->instructions[] = 'Use the simple_seo_* tools to diagnose search visibility, audit meta, explain the sitemap, resolve one entry\'s meta, and edit that entry\'s title, description, or noindex. There are no tools for site-wide settings or robots.txt.';
+            },
+        );
+    }
+
+    /**
+     * Registers the tool class with stimmt/craft-mcp when that plugin is
      * installed. Soft dependency (class_exists-guarded), so Simple SEO runs
      * unchanged when craft-mcp is absent.
      */
-    private function _registerMcpTools(): void
+    private function _registerStimmtMcpTools(): void
     {
         if (!class_exists(\stimmt\craft\Mcp\Mcp::class)) {
             return;
