@@ -5,28 +5,24 @@ namespace anvildev\simpleseo\tests\unit;
 use anvildev\simpleseo\mcp\SeoTools;
 use PHPUnit\Framework\TestCase;
 use ReflectionClass;
-use ReflectionMethod;
 
 /**
- * Verifies the craft-mcp integration surface: the tool class declares
- * exactly the expected `#[McpTool]` set, every write is flagged dangerous,
- * and the plugin registers it behind a class_exists() guard.
+ * Verifies the MCP integration surface: the tool class declares exactly
+ * the expected `#[McpTool]` set, reads are marked read-only, every write
+ * is flagged dangerous, and the plugin registers the class behind
+ * class_exists() guards for both Craft's server and stimmt/craft-mcp.
  *
- * Pure reflection and source scanning — the suite passes whether or not
- * craft-mcp is installed. Two gotchas shape the approach: attributes are
- * matched by NAME (never instantiated, the attribute classes may not
- * exist), and `McpToolMeta` arguments are never read through
- * `ReflectionAttribute::getArguments()`, because that would autoload the
- * absent ToolCategory enum and fatal. The dangerous flag is asserted by
- * scanning the source instead.
+ * Pure source scanning — the suite passes whether or not craft-mcp, the
+ * MCP SDK, or Craft 5.12 is installed. Attribute arguments are never read
+ * through `ReflectionAttribute::getArguments()`: a `new ToolAnnotations()`
+ * argument would autoload the SDK, and `McpToolMeta` would autoload the
+ * absent ToolCategory enum.
  *
  * @author Anvil Dev
  * @since 1.0.0
  */
 class McpToolsTest extends TestCase
 {
-    private const MCP_TOOL_ATTRIBUTE = 'Mcp\\Capability\\Attribute\\McpTool';
-
     /**
      * @var list<string> Every tool the class must declare, exactly.
      */
@@ -56,20 +52,19 @@ class McpToolsTest extends TestCase
      */
     public function testDeclaredToolsMatchExactly(): void
     {
-        $declared = [];
-        foreach ((new ReflectionClass(SeoTools::class))->getMethods(ReflectionMethod::IS_PUBLIC) as $method) {
-            foreach ($method->getAttributes(self::MCP_TOOL_ATTRIBUTE) as $attribute) {
-                // McpTool carries only scalar arguments, so reading them
-                // does not autoload anything from the absent package.
-                $declared[] = $attribute->getArguments()['name'];
-            }
-        }
+        preg_match_all("/name: '([^']+)'/", $this->toolSource(), $matches);
 
+        $declared = $matches[1];
         sort($declared);
         $expected = self::EXPECTED_TOOLS;
         sort($expected);
 
         $this->assertSame($expected, $declared);
+        $this->assertSame(
+            count(self::EXPECTED_TOOLS),
+            substr_count($this->toolSource(), '#[RequiresPermission(Permissions::ACCESS)]'),
+            'Every tool must require the plugin access permission.',
+        );
     }
 
     /**
@@ -79,19 +74,42 @@ class McpToolsTest extends TestCase
      */
     public function testWriteToolsAreFlaggedDangerous(): void
     {
-        $source = (string)file_get_contents(
-            (string)(new ReflectionClass(SeoTools::class))->getFileName(),
-        );
+        $source = $this->toolSource();
 
         foreach (self::WRITE_TOOLS as $method) {
-            $position = strpos($source, "public function $method(");
-            $this->assertNotFalse($position, "$method() should exist.");
-
-            $preceding = substr($source, max(0, $position - 800), 800);
+            $preceding = $this->preceding($source, $method);
             $this->assertStringContainsString(
                 'dangerous: true',
                 $preceding,
                 "$method() must carry McpToolMeta(dangerous: true).",
+            );
+            $this->assertStringContainsString(
+                'destructiveHint: true',
+                $preceding,
+                "$method() must be marked destructive for Craft's MCP server.",
+            );
+            $this->assertStringNotContainsString(
+                'readOnlyHint: true',
+                $preceding,
+                "$method() must not be read-only, or Craft would expose it to read tokens.",
+            );
+        }
+    }
+
+    /**
+     * Read tools opt into Craft's read scope. Without the hint, Craft treats
+     * a tool as a write and hides it from read-only tokens.
+     */
+    public function testReadToolsAreMarkedReadOnly(): void
+    {
+        $source = $this->toolSource();
+        $reads = ['doctor', 'auditMeta', 'explainSitemap', 'resolveMeta'];
+
+        foreach ($reads as $method) {
+            $this->assertStringContainsString(
+                'readOnlyHint: true',
+                $this->preceding($source, $method),
+                "$method() must set readOnlyHint so a read-only Craft token can call it.",
             );
         }
     }
@@ -109,5 +127,30 @@ class McpToolsTest extends TestCase
 
         $this->assertStringContainsString('class_exists(\\stimmt\\craft\\Mcp\\Mcp::class)', $source);
         $this->assertStringContainsString('EVENT_REGISTER_TOOLS', $source);
+        $this->assertStringContainsString('class_exists(\\craft\\services\\Mcp::class)', $source);
+        $this->assertStringContainsString('EVENT_REGISTER_CAPABILITY_TYPES', $source);
+    }
+
+    /**
+     * The tool class source. Attribute arguments stay unread — see the class doc.
+     */
+    private function toolSource(): string
+    {
+        return (string)file_get_contents(
+            (string)(new ReflectionClass(SeoTools::class))->getFileName(),
+        );
+    }
+
+    /**
+     * The attribute block immediately above a tool method.
+     */
+    private function preceding(string $source, string $method): string
+    {
+        $position = strpos($source, "public function $method(");
+        if ($position === false) {
+            $this->fail("$method() should exist.");
+        }
+
+        return substr($source, max(0, $position - 900), 900);
     }
 }
