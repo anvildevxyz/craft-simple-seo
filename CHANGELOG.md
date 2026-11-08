@@ -1,6 +1,6 @@
 # Release Notes for Simple SEO
 
-## Unreleased
+## 1.0.5 - 2026-11-08
 
 ### Added
 
