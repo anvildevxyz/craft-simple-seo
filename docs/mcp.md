@@ -1,6 +1,8 @@
 # MCP Tools
 
-If the [craft-mcp](https://github.com/stimmtdigital/craft-mcp) plugin is installed, Simple SEO registers a set of MCP tools automatically — nothing to configure. Without craft-mcp, nothing changes; the integration is a soft dependency and no code from it loads.
+On Craft 5.12 or newer, Simple SEO registers its tools with Craft's built-in MCP server. Nothing else to install: enable the server under Settings → MCP (or run `php craft mcp/serve --user=…` locally) and the `simple_seo_*` tools are available to that user, within their permissions. Read tools are marked read-only, so a read-only token can call them. The two writes require write access, and every tool requires permission to open Simple SEO.
+
+On older Craft, the same tools register with the [craft-mcp](https://github.com/stimmtdigital/craft-mcp) plugin when it is installed. Without either server, nothing changes; both integrations are soft dependencies and no code from them loads.
 
 This makes Simple SEO usable by AI agents driving Craft over MCP: an agent can diagnose the install, explain the sitemap, audit the meta that ships, resolve one page's meta with provenance, and make targeted edits — through the same services the console commands and the front end use.
 
@@ -15,7 +17,7 @@ This makes Simple SEO usable by AI agents driving Craft over MCP: an agent can d
 
 ## Write tools
 
-Both writes go through the normal element save, so field validation, events, and drafts/revisions behavior all apply. Both are flagged **dangerous** in their tool metadata, so MCP clients that gate dangerous tools will ask first.
+Both writes go through the normal element save, so field validation, events, and drafts/revisions behavior all apply. Both are flagged **dangerous** for craft-mcp, and marked destructive (not read-only) for Craft's server, so a read-only token cannot call them and clients that gate dangerous tools will ask first.
 
 | Tool | What it does |
 |---|---|

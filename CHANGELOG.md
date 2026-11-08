@@ -4,6 +4,7 @@
 
 ### Added
 
+- MCP tools register with Craft 5.12's built-in server as well as stimmt/craft-mcp. Read tools are marked read-only, so a read-only Craft token can call them; writes stay behind write access. Every tool requires permission to open Simple SEO. No extra package on Craft 5.12
 - **`craft simple-seo/migrate/ether --apply --carry-settings`** carries the ether settings that have a faithful equivalent here, instead of only reporting them. Ether applies its settings-screen robots to every element that sets none of its own, so a migration could leave pages that ether kept out of the index rendering no robots tag at all; the flag writes those directives onto the entries that had them, as normal per-entry values you can see and edit in the CP. It also carries ether's switched-off sitemap sections across as per-site exclusions. Off unless you ask for it, and never implied by `--apply` — stamping `noindex` onto pages is not a decision a migration should make for you. Ether's sitemap priorities are still not imported: a section with no priority set emits no `<priority>` here, on purpose
 
 ## 1.0.4 - 2026-08-18

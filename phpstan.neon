@@ -17,8 +17,7 @@ parameters:
         - vendor/autoload.php
         - vendor/craftcms/cms/bootstrap/console.php
     ignoreErrors:
-        # The optional craft-mcp integration (src/mcp). Guarded by
-        # class_exists() at registration and read only reflectively, so
-        # nothing loads when the package is absent.
-        - '#Attribute class Mcp\\Capability\\Attribute\\\w+ does not exist#'
+        # stimmt/craft-mcp stays optional. Its attributes are read
+        # reflectively and the package is not installed for analysis.
+        # McpTool itself comes in with Craft 5.12's mcp/sdk dependency.
         - '#stimmt\\craft\\Mcp\\#'

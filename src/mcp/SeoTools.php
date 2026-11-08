@@ -7,10 +7,13 @@ use anvildev\simpleseo\helpers\Coerce;
 use anvildev\simpleseo\helpers\Lookup;
 use anvildev\simpleseo\helpers\SeoFieldReader;
 use anvildev\simpleseo\models\Finding;
+use anvildev\simpleseo\Permissions;
 use anvildev\simpleseo\Plugin;
 use Craft;
 use craft\elements\Entry;
+use craft\mcp\attributes\RequiresPermission;
 use Mcp\Capability\Attribute\McpTool;
+use Mcp\Schema\ToolAnnotations;
 use stimmt\craft\Mcp\attributes\McpToolMeta;
 use stimmt\craft\Mcp\enums\ToolCategory;
 
@@ -25,8 +28,12 @@ use stimmt\craft\Mcp\enums\ToolCategory;
  * and events all apply; the noindex switch is flagged dangerous because it
  * removes the page from search results and the sitemap.
  *
- * The attributes are read reflectively by craft-mcp and never instantiated
- * here, so the package stays a soft dependency.
+ * The attributes are read reflectively by Craft 5.12's MCP server and by
+ * stimmt/craft-mcp, and never instantiated here, so both stay soft
+ * dependencies. Read tools set `readOnlyHint` so a read-only Craft token
+ * can call them; writes omit it, so they require Craft's write scope.
+ * `RequiresPermission` hides every tool from users who cannot open the
+ * plugin. Neither attribute is instantiated when its package is absent.
  *
  * @author Anvil Dev
  * @since 1.0.0
@@ -47,8 +54,10 @@ class SeoTools
     #[McpTool(
         name: 'simple_seo_doctor',
         description: 'Check the install for configuration that would damage its search visibility (site-wide noindex, blocking robots.txt, empty sitemap, shadowed robots.txt, broken title format). Levels: problem, note, ok — only problems are wrong.',
+        annotations: new ToolAnnotations(readOnlyHint: true),
     )]
     #[McpToolMeta(category: ToolCategory::PLUGIN)]
+    #[RequiresPermission(Permissions::ACCESS)]
     public function doctor(): array
     {
         return $this->guard(static fn(): array => Finding::listPayload(
@@ -64,8 +73,10 @@ class SeoTools
     #[McpTool(
         name: 'simple_seo_audit_meta',
         description: 'List live pages whose meta is missing, duplicated, or over the soft length limits, measured on the resolved values that ship. Facts only, no score. Examines every live entry — can be slow on large sites; pass sectionHandle to narrow it.',
+        annotations: new ToolAnnotations(readOnlyHint: true),
     )]
     #[McpToolMeta(category: ToolCategory::PLUGIN)]
+    #[RequiresPermission(Permissions::ACCESS)]
     public function auditMeta(?string $siteHandle = null, ?string $sectionHandle = null): array
     {
         return $this->guard(static function() use ($siteHandle, $sectionHandle): array {
@@ -94,8 +105,10 @@ class SeoTools
     #[McpTool(
         name: 'simple_seo_explain_sitemap',
         description: 'Explain the XML sitemap per section: whether each section is included, how many URLs it contributes, and why a section contributes none. The same diagnosis as /sitemap.xml?explain.',
+        annotations: new ToolAnnotations(readOnlyHint: true),
     )]
     #[McpToolMeta(category: ToolCategory::PLUGIN)]
+    #[RequiresPermission(Permissions::ACCESS)]
     public function explainSitemap(?string $siteHandle = null): array
     {
         return $this->guard(static function() use ($siteHandle): array {
@@ -119,8 +132,10 @@ class SeoTools
     #[McpTool(
         name: 'simple_seo_resolve_meta',
         description: 'The fully resolved meta for one entry — every fallback applied, the same values the front end and GraphQL render. Each value names its source (field, site-default, entry-title, element-url, none), so "why is this page\'s description that" is answerable directly.',
+        annotations: new ToolAnnotations(readOnlyHint: true),
     )]
     #[McpToolMeta(category: ToolCategory::PLUGIN)]
+    #[RequiresPermission(Permissions::ACCESS)]
     public function resolveMeta(int $entryId, ?string $siteHandle = null): array
     {
         return $this->guard(function() use ($entryId, $siteHandle): array {
@@ -143,8 +158,10 @@ class SeoTools
     #[McpTool(
         name: 'simple_seo_set_entry_meta',
         description: 'Set the meta title and/or description on one entry\'s SEO field. Pass an empty string to clear a value back to its fallback; omit to leave it unchanged. Saves through the normal element save, so validation applies. Returns the re-resolved meta.',
+        annotations: new ToolAnnotations(destructiveHint: true),
     )]
     #[McpToolMeta(category: ToolCategory::PLUGIN, dangerous: true)]
+    #[RequiresPermission(Permissions::ACCESS)]
     public function setEntryMeta(int $entryId, ?string $title = null, ?string $description = null, ?string $siteHandle = null): array
     {
         return $this->_updateSeoValue($entryId, $siteHandle, static function(SeoData $value) use ($title, $description): void {
@@ -166,8 +183,10 @@ class SeoTools
     #[McpTool(
         name: 'simple_seo_set_entry_noindex',
         description: 'Switch noindex on or off for one entry. On, the page asks search engines not to list it AND drops out of the sitemap — this removes the page from search results. Returns the re-resolved meta.',
+        annotations: new ToolAnnotations(destructiveHint: true),
     )]
     #[McpToolMeta(category: ToolCategory::PLUGIN, dangerous: true)]
+    #[RequiresPermission(Permissions::ACCESS)]
     public function setEntryNoindex(int $entryId, bool $noindex, ?string $siteHandle = null): array
     {
         return $this->_updateSeoValue($entryId, $siteHandle, static function(SeoData $value) use ($noindex): void {
